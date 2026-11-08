@@ -1,0 +1,18 @@
+{
+  "name": "Notpresso Expert",
+  "short_name": "Notpresso",
+  "description": "Standalone offline Bluetooth Low Energy controller for Nespresso Expert EN 350.G",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101216",
+  "theme_color": "#101216",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%23C88D4B'><rect width='512' height='512' rx='100' fill='%23181B22'/><path d='M100 400h312v-32H100v32m280-208h-32v-48h32m0-32H120v160a64 64 0 0064 64h96a64 64 0 0064-64v-48h36a32 32 0 0032-32v-48a32 32 0 00-32-32z'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

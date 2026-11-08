@@ -1,0 +1,16 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# SSL private keys/certificates if generated locally
+*.pem
+*.key
+*.crt
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local editor
+.vscode/
+.idea/
