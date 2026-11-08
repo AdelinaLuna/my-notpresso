@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23C88D4B'><path d='M2 21h18v-2H2v2M20 8h-2V5h2m0-2H4v10a4 4 0 004 4h6a4 4 0 004-4v-3h2a2 2 0 002-2V5a2 2 0 00-2-2z'/></svg>">
 
-  <link rel="stylesheet" href="styles.css?v=0.1.1">
+  <link rel="stylesheet" href="styles.css?v=0.2.0">
 </head>
 <body>
   <div class="app-container">
@@ -22,12 +22,12 @@
       <div class="brand">
         <div class="logo-icon">☕</div>
         <div>
-          <h1>Notpresso <span class="badge-expert">Expert</span> <span class="badge-version">v0.1.1</span></h1>
-          <p class="subtitle">EN 350.G Offline BLE Controller</p>
+          <h1>Notpresso <span class="badge-expert">Expert</span> <span class="badge-version">v0.2.0</span></h1>
+          <p id="envSubtitle" class="subtitle">EN 350.G Offline BLE Controller</p>
         </div>
       </div>
       <div class="header-actions">
-        <button id="btnSettings" class="icon-btn" title="Settings & Auth Key">⚙️</button>
+        <button id="btnSettings" class="icon-btn" title="Pairing & Auth Key">🔑</button>
         <button id="btnLogs" class="icon-btn" title="BLE Packet Inspector">📡</button>
       </div>
     </header>
@@ -39,7 +39,7 @@
           <span id="connDot" class="status-dot disconnected"></span>
           <div>
             <span id="connStatusText" class="status-label">Disconnected</span>
-            <div id="deviceSubtext" class="status-subtext">Click Connect to scan for Expert EN 350</div>
+            <div id="deviceSubtext" class="status-subtext">Tap Connect to scan for Expert EN 350.G</div>
           </div>
         </div>
         <button id="btnConnect" class="btn btn-connect">
@@ -55,12 +55,12 @@
           <span id="chipMachineState" class="chip-val">Ready</span>
         </div>
         <div class="chip">
-          <span class="chip-label">Security</span>
-          <span id="chipPairingState" class="chip-val">Authenticated</span>
+          <span class="chip-label">Slider</span>
+          <span id="chipSliderState" class="chip-val">Closed</span>
         </div>
         <div class="chip">
-          <span class="chip-label">Capsules</span>
-          <span id="chipCapsules" class="chip-val">--</span>
+          <span class="chip-label">Key State</span>
+          <span id="chipPairingState" class="chip-val">--</span>
         </div>
       </div>
     </section>
@@ -68,30 +68,31 @@
     <!-- Navigation Tabs -->
     <nav class="nav-tabs">
       <button class="nav-tab active" data-tab="tab-presets">Presets</button>
-      <button class="nav-tab" data-tab="tab-custom">Custom Recipe</button>
-      <button class="nav-tab" data-tab="tab-saved">My Library</button>
+      <button class="nav-tab" data-tab="tab-custom">Custom</button>
+      <button class="nav-tab" data-tab="tab-saved">Library</button>
+      <button class="nav-tab" data-tab="tab-machine">Machine</button>
     </nav>
 
     <!-- TAB 1: PRESETS -->
     <main id="tab-presets" class="tab-pane active">
-      <!-- Temperature Selector -->
+      <!-- Temperature Selector (Verified from TemperatureConversion in classes5.dex: 1=Low, 0=Medium, 2=High) -->
       <div class="card selector-card">
         <label class="card-title">Brew Temperature</label>
         <div class="temp-toggle-group">
-          <button class="temp-btn" data-temp="0">
+          <button class="temp-btn" data-temp="1">
             <span class="temp-indicator temp-warm"></span>
-            <span class="temp-name">Medium</span>
-            <span class="temp-celsius">~83°C</span>
+            <span class="temp-name">Warm (Low)</span>
+            <span class="temp-celsius">0x01 • ~80°C</span>
           </button>
-          <button class="temp-btn active" data-temp="1">
+          <button class="temp-btn active" data-temp="0">
             <span class="temp-indicator temp-hot"></span>
-            <span class="temp-name">Hot</span>
-            <span class="temp-celsius">~86°C</span>
+            <span class="temp-name">Medium</span>
+            <span class="temp-celsius">0x00 • ~85°C</span>
           </button>
           <button class="temp-btn" data-temp="2">
             <span class="temp-indicator temp-veryhot"></span>
-            <span class="temp-name">Extra Hot</span>
-            <span class="temp-celsius">~89°C</span>
+            <span class="temp-name">Very Hot</span>
+            <span class="temp-celsius">0x02 • ~90°C</span>
           </button>
         </div>
       </div>
@@ -102,7 +103,7 @@
           <div class="drink-icon">☕</div>
           <div class="drink-info">
             <div class="drink-name">Ristretto</div>
-            <div class="drink-vol">25 ml</div>
+            <div class="drink-vol">25 ml (Code 0x00)</div>
           </div>
           <span class="action-tag">Brew</span>
         </button>
@@ -111,7 +112,7 @@
           <div class="drink-icon">☕</div>
           <div class="drink-info">
             <div class="drink-name">Espresso</div>
-            <div class="drink-vol">40 ml</div>
+            <div class="drink-vol">40 ml (Code 0x01)</div>
           </div>
           <span class="action-tag">Brew</span>
         </button>
@@ -120,7 +121,7 @@
           <div class="drink-icon">☕</div>
           <div class="drink-info">
             <div class="drink-name">Lungo</div>
-            <div class="drink-vol">110 ml</div>
+            <div class="drink-vol">110 ml (Code 0x02)</div>
           </div>
           <span class="action-tag">Brew</span>
         </button>
@@ -129,7 +130,7 @@
           <div class="drink-icon">☕💧</div>
           <div class="drink-info">
             <div class="drink-name">Americano</div>
-            <div class="drink-vol">25ml coffee + 125ml water</div>
+            <div class="drink-vol">25ml coffee + 125ml water (Code 0x05)</div>
           </div>
           <span class="action-tag">Brew</span>
         </button>
@@ -138,7 +139,7 @@
           <div class="drink-icon">💧</div>
           <div class="drink-info">
             <div class="drink-name">Hot Water</div>
-            <div class="drink-vol">200 ml</div>
+            <div class="drink-vol">200 ml (Code 0x04)</div>
           </div>
           <span class="action-tag">Dispense</span>
         </button>
@@ -149,15 +150,24 @@
     <main id="tab-custom" class="tab-pane">
       <div class="card recipe-builder-card">
         <h2 class="card-title">Craft Custom Recipe</h2>
-        <p class="card-desc">Bypass the factory dial presets with milliliter-level volume & ratio calibration.</p>
+        <p class="card-desc">Two-stage BLE extraction via <code>01 10 08</code> recipe programming + <code>0x07</code> custom brew trigger.</p>
 
         <!-- Temperature Selection -->
         <div class="form-group">
           <label class="form-label">Extraction Temperature</label>
           <div class="temp-toggle-group compact">
-            <button class="temp-btn-custom" data-temp="0">Medium (83°)</button>
-            <button class="temp-btn-custom active" data-temp="1">Hot (86°)</button>
-            <button class="temp-btn-custom" data-temp="2">Extra Hot (89°)</button>
+            <button class="temp-btn-custom" data-temp="1">Warm (0x01)</button>
+            <button class="temp-btn-custom active" data-temp="0">Medium (0x00)</button>
+            <button class="temp-btn-custom" data-temp="2">Very Hot (0x02)</button>
+          </div>
+        </div>
+
+        <!-- Pour Order Selection -->
+        <div class="form-group">
+          <label class="form-label">Extraction Sequence</label>
+          <div class="temp-toggle-group compact">
+            <button class="seq-btn-custom active" data-seq="coffee-first">☕ Coffee → 💧 Water</button>
+            <button class="seq-btn-custom" data-seq="water-first">💧 Water → ☕ Coffee (Long Black)</button>
           </div>
         </div>
 
@@ -167,25 +177,25 @@
             <label class="form-label">Coffee Extraction (ml)</label>
             <span id="valCoffeeMl" class="slider-badge">40 ml</span>
           </div>
-          <input type="range" id="sliderCoffeeMl" min="20" max="110" step="5" value="40" class="styled-slider">
+          <input type="range" id="sliderCoffeeMl" min="15" max="130" step="5" value="40" class="styled-slider">
           <div class="slider-ticks">
-            <span>20ml (Ristretto)</span>
-            <span>40ml</span>
-            <span>110ml (Max)</span>
+            <span>15ml</span>
+            <span>40ml (Espresso)</span>
+            <span>130ml</span>
           </div>
         </div>
 
         <!-- Hot Water Volume Slider -->
         <div class="form-group">
           <div class="slider-header">
-            <label class="form-label">Hot Water Top-Up (ml)</label>
+            <label class="form-label">Hot Water Bypass (ml)</label>
             <span id="valWaterMl" class="slider-badge">80 ml</span>
           </div>
-          <input type="range" id="sliderWaterMl" min="0" max="250" step="10" value="80" class="styled-slider">
+          <input type="range" id="sliderWaterMl" min="0" max="250" step="5" value="80" class="styled-slider">
           <div class="slider-ticks">
-            <span>0ml (None)</span>
-            <span>100ml</span>
-            <span>250ml (Max)</span>
+            <span>0ml (Pure Coffee)</span>
+            <span>125ml</span>
+            <span>250ml</span>
           </div>
         </div>
 
@@ -196,7 +206,7 @@
             <span id="valTotalMl" class="summary-value">120 ml</span>
           </div>
           <div class="summary-col">
-            <span class="summary-label">Coffee Ratio</span>
+            <span class="summary-label">Coffee : Water</span>
             <span id="valRatio" class="summary-value">1 : 2.0</span>
           </div>
         </div>
@@ -224,6 +234,65 @@
       </div>
     </main>
 
+    <!-- TAB 4: MACHINE & DIAL PROGRAMMING -->
+    <main id="tab-machine" class="tab-pane">
+      <div class="card recipe-builder-card">
+        <h2 class="card-title">Physical Dial Cup Sizes</h2>
+        <p class="card-desc">Program the default volumes stored inside your Expert EN 350.G for physical rotary dial brewing (Service <code>06aa1940</code>).</p>
+
+        <div class="form-group">
+          <label class="form-label" for="selectCupTarget">Dial Position Target (<code>06aa3a14</code>)</label>
+          <select id="selectCupTarget" class="styled-input">
+            <option value="0">0 — Ristretto (Default 25 ml)</option>
+            <option value="1">1 — Espresso (Default 40 ml)</option>
+            <option value="2">2 — Lungo (Default 110 ml)</option>
+            <option value="3">3 — Americano: Coffee Component (Default 25 ml)</option>
+            <option value="4">4 — Americano: Hot Water Component (Default 125 ml)</option>
+            <option value="5">5 — Hot Water (Default 200 ml)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <div class="slider-header">
+            <label class="form-label" for="inputCupVolume">Target Volume (ml) (<code>06aa3a24</code>)</label>
+            <span id="valCupTargetMl" class="slider-badge">40 ml</span>
+          </div>
+          <input type="range" id="inputCupVolume" min="15" max="250" step="5" value="40" class="styled-slider">
+        </div>
+
+        <div class="btn-stack">
+          <button id="btnReadCupSize" class="btn btn-outline">
+            <span>📖</span> Read Current Dial Volume
+          </button>
+          <button id="btnWriteCupSize" class="btn btn-primary">
+            <span>⚡</span> Write Volume to Machine Dial
+          </button>
+        </div>
+      </div>
+
+      <div class="card recipe-builder-card" style="margin-top: 14px;">
+        <h2 class="card-title">Machine Telemetry & Onboarding</h2>
+        <div class="recipe-summary" style="margin-bottom: 12px;">
+          <div class="summary-col">
+            <span class="summary-label">Serial (06aa3a31)</span>
+            <span id="valSerial" class="summary-value" style="font-size:0.9rem;">--</span>
+          </div>
+          <div class="summary-col">
+            <span class="summary-label">Firmware (06aa3a21)</span>
+            <span id="valFirmware" class="summary-value" style="font-size:0.9rem;">--</span>
+          </div>
+        </div>
+        <div class="btn-stack">
+          <button id="btnOpenOnboarding" class="btn btn-primary">
+            <span>🔑</span> Open Pairing / Auth Key Manager
+          </button>
+          <button id="btnBleFactoryReset" class="btn btn-danger">
+            <span>🔄</span> Send BLE Factory Reset (03 07 00)
+          </button>
+        </div>
+      </div>
+    </main>
+
     <!-- Active Brewing Modal / Overlay -->
     <div id="brewModal" class="modal-backdrop hidden">
       <div class="modal-card brew-active-card">
@@ -236,52 +305,80 @@
           <div class="cup-graphic">☕</div>
         </div>
         <h3 id="brewModalTitle">Brewing Espresso</h3>
-        <p id="brewModalSub">Machine is running. Please keep cup under outlet...</p>
+        <p id="brewModalSub">Machine is running. Keep cup under outlet...</p>
         
         <div class="brew-progress-bar">
           <div id="brewProgressBar" class="progress-fill"></div>
         </div>
 
         <button id="btnStopBrew" class="btn btn-danger btn-large">
-          <span>🛑</span> Emergency Stop
+          <span>🛑</span> Cancel Brew (03 06 01 02)
         </button>
       </div>
     </div>
 
-    <!-- Settings & Auth Key Modal -->
+    <!-- Settings, Onboarding & Auth Key Modal -->
     <div id="settingsModal" class="modal-backdrop hidden">
       <div class="modal-card">
         <div class="modal-header">
-          <h3>Settings & Security Key</h3>
+          <h3>🔑 Pairing & Auth Key (CMID)</h3>
           <button id="btnCloseSettings" class="close-btn">&times;</button>
         </div>
         <div class="modal-body">
           <div class="alert alert-warning">
-            <strong>⚠️ Hardware Pairing Limit Warning:</strong>
-            Nespresso Bluetooth chips only store ~25 pairings in internal memory. Always reuse your Auth Key rather than re-pairing repeatedly!
+            <strong>💡 Reverse-Engineered from Nespresso 3.28.0 APK:</strong><br>
+            1. Every BLE Auth Key is 8 bytes (16 hex chars) whose first nibble <strong>MUST be <code>8</code></strong> (<code>(byte[0] &amp; 0xF0) == 0x80</code> via <code>PairingKey.getBufferFromByteArray</code>).<br>
+            2. If characteristic <code>06aa3a51</code> reads <code>2 (PRESENT)</code>, the machine already has a key and <strong>refuses new keys</strong> until factory reset!
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="inputAuthKey">16-Character Hex Auth Key (CMID)</label>
-            <input type="text" id="inputAuthKey" class="styled-input" placeholder="e.g. 82C15F832A864437" maxlength="16">
-            <small class="field-hint">Must start with 8 or 9 (8 bytes / 16 hex characters).</small>
+            <label class="form-label" for="inputAuthKey">16-Char BLE Key OR 32-Char Nespresso DB Key</label>
+            <input type="text" id="inputAuthKey" class="styled-input" placeholder="e.g. 8215C8D89A6A51A0 (16 or 32 hex chars)" maxlength="32">
+            <small id="authKeyHint" class="field-hint">Paste a 16-char wire key (starts with 8) OR a 32-char Nespresso SQLite pairingKey (auto-converted).</small>
           </div>
 
-          <button id="btnSaveAuthKey" class="btn btn-primary" style="width: 100%;">Save Auth Key</button>
+          <div class="btn-stack" style="margin-bottom: 12px;">
+            <button id="btnSaveAuthKey" class="btn btn-primary" style="width: 100%;">💾 Save Auth Key</button>
+            <button id="btnPairNewDevice" class="btn btn-outline" style="width: 100%;">✨ Generate Valid 0x8X Key &amp; Pair Machine</button>
+          </div>
 
           <hr class="divider">
 
           <div class="guide-box">
-            <h4>How to get your Auth Key:</h4>
+            <h4>🔧 How to Pair WITHOUT Snatching the Old Key (10-Second Reset):</h4>
+            <p style="font-size:0.82rem; color:#B8B2A6; margin-bottom:8px;">
+              Extracted from official Nespresso 3.28.0 resource <code>0x7f1102bc</code> (<em>connect_machine_advanced_mode_help_description</em>):
+            </p>
             <ol>
-              <li>Enable <strong>Developer Options</strong> on Android.</li>
-              <li>Turn on <strong>Enable Bluetooth HCI snoop log</strong>.</li>
-              <li>Open the official Nespresso app (or trigger a brew once).</li>
-              <li>Pull <code>btsnoop_hci.log</code> and inspect write requests to characteristic <code>06aa3a41</code>.</li>
-              <li>Copy the 16 hex characters (starts with 8) and paste above.</li>
+              <li>Ensure the Nespresso Expert slider is <strong>closed</strong> and machine is OFF / Standby.</li>
+              <li>Put the machine in Factory Reset / Pairing Mode using the physical dial:
+                <ul style="margin-top:4px; margin-bottom:4px;">
+                  <li>Hold the <strong>Brew button for 6 seconds</strong> (dials flash) → Turn dial to <strong>Lungo</strong> → Press the <strong>Brew button once</strong> (Lungo flashes) to reset factory settings.</li>
+                </ul>
+              </li>
+              <li>Once reset, characteristic <code>06aa3a51</code> becomes <code>0/1 (ABSENT)</code>.</li>
+              <li>Tap <strong>Connect</strong> in this app — or tap <strong>"Generate Valid 0x8X Key &amp; Pair Machine"</strong> above! The app will onboard your machine with a brand-new key automatically.</li>
             </ol>
           </div>
-          <div class="settings-version-tag">Notpresso Expert v0.1.1 • GitHub Pages</div>
+          <div class="settings-version-tag">Notpresso Expert v0.2.0 • Standalone APK &amp; Web BLE</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Native BLE Device Picker Modal (Used in Android APK mode) -->
+    <div id="scannerModal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>🔍 Select Nespresso Machine</h3>
+          <button id="btnCloseScanner" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="scannerStatusText" class="field-hint" style="margin-bottom: 10px;">Scanning via Android Native BluetoothLeScanner...</p>
+          <div id="scannerDeviceList" class="library-list" style="max-height: 280px; overflow-y: auto;">
+          </div>
+          <div class="btn-stack" style="margin-top: 12px;">
+            <button id="btnRescanBle" class="btn btn-outline">🔄 Rescan BLE</button>
+          </div>
         </div>
       </div>
     </div>
@@ -299,7 +396,7 @@
             <span id="logCounter" class="log-counter">0 events</span>
           </div>
           <div id="logConsole" class="log-console">
-            <div class="log-entry info">[System] Notpresso Expert v0.1.1 ready to connect to EN 350.G</div>
+            <div class="log-entry info">[System] Notpresso Expert v0.2.0 ready to connect to EN 350.G</div>
           </div>
         </div>
       </div>
@@ -309,6 +406,6 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="app.js?v=0.1.1"></script>
+  <script src="app.js?v=0.2.0"></script>
 </body>
 </html>

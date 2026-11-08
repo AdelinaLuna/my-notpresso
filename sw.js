@@ -1,9 +1,9 @@
-const CACHE_NAME = 'notpresso-v0.1.1';
+const CACHE_NAME = 'notpresso-v0.2.0';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=0.1.1',
-  './app.js?v=0.1.1',
+  './styles.css?v=0.2.0',
+  './app.js?v=0.2.0',
   './manifest.json'
 ];
 
@@ -16,11 +16,9 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      );
-    })
+    caches.keys().then((keys) =>
+      Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k)))
+    )
   );
   self.clients.claim();
 });

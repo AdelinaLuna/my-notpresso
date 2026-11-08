@@ -1,0 +1,28 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'io.github.adelinaluna.notpresso'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "io.github.adelinaluna.notpresso"
+        minSdk 26
+        targetSdk 34
+        versionCode 2
+        versionName "2.0.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
