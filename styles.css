@@ -620,26 +620,161 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 12px 14px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.recipe-reorder-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.btn-reorder {
+  background: var(--bg-chip);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  border-radius: 4px;
+  width: 26px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1;
+  padding: 0;
+}
+
+.btn-reorder:hover:not(:disabled) {
+  background: var(--accent-gold-muted);
+  color: var(--accent-gold);
+  border-color: var(--accent-gold);
+}
+
+.btn-reorder:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.recipe-info-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.recipe-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .recipe-meta-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
+  color: var(--text-main);
+  word-break: break-word;
+}
+
+.btn-inline-rename {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.btn-inline-rename:hover {
+  color: var(--accent-gold);
+  background: var(--bg-chip);
 }
 
 .recipe-meta-details {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   margin-top: 3px;
 }
 
 .recipe-actions {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Home Tab Favorites Section */
+.home-favorites-grid {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  margin-top: 10px;
+}
+
+.home-favorite-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  transition: all 0.15s ease;
+}
+
+.home-favorite-card:hover {
+  border-color: var(--accent-gold);
+  background: rgba(200, 141, 75, 0.04);
+}
+
+.home-fav-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-fav-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-fav-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-fav-vol {
+  font-size: 11px;
+  background: var(--bg-chip);
+  color: var(--accent-gold);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.home-fav-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.home-fav-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 /* Modals */

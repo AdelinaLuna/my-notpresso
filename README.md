@@ -1,8 +1,8 @@
-# Notpresso Expert (EN 350.G) — v0.2.0
+# Notpresso Expert (EN 350.G) — v0.3.0
 
 <div align="center">
   <h3>Standalone Offline BLE Alternative for Nespresso Expert EN 350.G</h3>
-  <p><strong>Zero Cloud Accounts • Split-Temp Custom Recipes • Cleaning Capsule & Bloom Lab • Rotary Dial Programmer • 100% Offline</strong></p>
+  <p><strong>Zero Cloud Accounts • Reorderable Favorites & Library • Split-Temp Custom Recipes • Rotary Dial Calibration • 100% Offline</strong></p>
 </div>
 
 ---
@@ -15,32 +15,43 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.2.0 (Complete Hardware Capability Unlock)
+## 2. What's New in v0.3.0 (Favorites, Library Reordering & App Calibration)
 
-Following a comprehensive protocol investigation of the **Nespresso Expert EN 350.G (D80 / C80)** BLE GATT interface, `my-notpresso` unlocks every hardware capability of the machine — plus multi-stage orchestration that the original companion app never exposed:
+`v0.3.0` incorporates the complete personal favorites and rotary dial calibration setup from the official companion app:
 
-1. **Ingredient Pour Sequence (`Coffee → Water` vs. `Water → Coffee`)**:
-   - **`Coffee → Water` (Classic Americano)**: Extracts espresso first, then tops up with hot water through the dedicated hot-water bypass spout.
-   - **`Water → Coffee` (Long Black)**: Dispenses hot water into the cup first, then extracts espresso on top so the golden crema stays intact.
-2. **Full Hardware Volumetric Ranges**:
-   - **Coffee Volume (`0x01`)**: `0 ml` (Pure Hot Water mode) **or** `15 ml – 130 ml` (`1 ml` precision — up to Max Lungo `130 ml`).
-   - **Hot Water Volume (`0x02`)**: `0 ml` (Pure Coffee mode) **or** `25 ml – 300 ml` (`1 ml` precision).
-   - **Maximum Combined Recipe**: Up to **`430 ml`** (`130 ml` Coffee + `300 ml` Hot Water).
-3. **Split-Temperature Two-Stage Brewing ("Great Americano XL")**:
-   - The Expert's single-command `Recipe` opcode (`0x07`) applies a single temperature byte to the whole drink.
-   - When you enable **Split Temp** in the **Custom** tab (or tap the **Great Americano XL** preset), Notpresso automatically orchestrates two sequential hardware recipe brews with independent temperatures — e.g., **`40 ml` Coffee at High/Max (`89°C` / `0x02`)** followed automatically by **`160 ml` Hot Water at Low/Warm (`80°C` / `0x01`)** as soon as the machine signals `READY`.
-4. **Cleaning Capsule (`40 ml → 60s Soak → 130 ml`) & Pre-Infusion Bloom (`15 ml → 10s → 35 ml`) Lab**:
-   - Unlike older manual-lever Nespresso machines, the Expert EN 350.G has a motorized brew chamber that automatically ejects the capsule when a brew finishes.
-   - The machine's firmware includes a **300-second (5-minute) long-brew pause window**: when the water tank is empty or lifted slightly off its valve (`waterTankEmpty` bit `7` of `06aa3a12`), **the machine pauses mid-brew for up to 5 minutes while keeping the chamber clamped closed around the capsule!**
-   - The **Bloom/Clean** tab provides both:
-     - **Mode 1: In-Chamber Water-Pause Soak** (watches `06aa3a12` bit `7`, automatically starts the `60s` cleaning soak or `10s` bloom timer the instant the machine pauses, and gives you a 1-tap BLE Resume button so the remaining `130 ml` flushes through the exact same capsule).
-     - **Mode 2: Automated 2-Stage BLE Macro** (`Stage 1 Brew` → `Countdown Timer` → `Stage 2 Brew`).
-5. **Hardware Scheduled / Delayed Brew Timer**:
-   - Programs the machine's onboard countdown delay timer (`03 05 07 04 <uint32_delay_seconds> <temp> <brew_id>`) and reads back active schedules from `06aa3a32`.
-6. **Physical Rotary Dial Cup-Size Programmer & Machine Settings (`Machine` Tab)**:
-   - Reads and writes the 6 factory cup-size registers (`06aa3a14` / `06aa3a24`) so turning the physical dial on the machine brews your exact custom milliliter volumes (`Ristretto 15–30 ml`, `Espresso 30–70 ml`, `Lungo 70–130 ml`, `Hot Water 50–300 ml`, `Americano Coffee 15–110 ml`, `Americano Water 25–300 ml`).
-   - Configures **Auto-Off Standby Delay** (`9 min`, `30 min`, `2 hr`, `8 hr`) and **Water Hardness** (`Level 0–4`) via `06aa3a44`.
-   - Decodes the full 48-bit `MachineStatus` (`06aa3a12`) bitfield (`Water Tank Empty`, `Slider Open/Closed`, `Capsule Bin Full`, `Descaling Needed`, `Overheat`, `Programmed Brew Active`, and `10-bit Capsule Stock`) and `CommandResponse` (`06aa3a52`) error subcodes (`0x01..0x12`).
+1. **⭐ My Favorites & Suggestions (Home Presets Tab)**:
+   - Displays your top favorite recipes right on the main home screen below the rotary dial presets.
+   - 1-tap brew access and 1-tap edit button without needing to switch tabs.
+2. **Curated Nespresso App Favorites Pre-Seeded**:
+   - Includes all 9 custom recipes from the official Nespresso app:
+     - **Water Lungo Extra Hot** (`0 ml` Coffee + `270 ml` Water, Extra Hot ~90°C)
+     - **Water Lazy Hot Pots** (`0 ml` Coffee + `200 ml` Water, Extra Hot ~90°C)
+     - **Espresso Long Americano** (`40 ml` Coffee + `160 ml` Water, Extra Hot ~90°C, Coffee first)
+     - **Espresso Medium Americano** (`40 ml` Coffee + `120 ml` Water, Hot ~85°C, Coffee first)
+     - **Espresso Short Americano** (`40 ml` Coffee + `70 ml` Water, Warm ~80°C, Coffee first)
+     - **Ristretto Lungo Americano** (`25 ml` Coffee + `115 ml` Water, Hot ~85°C, Coffee first)
+     - **Ristretto Medium American** (`25 ml` Coffee + `85 ml` Water, Hot ~85°C, Coffee first)
+     - **Ristretto Short Americano** (`25 ml` Coffee + `55 ml` Water, Warm ~80°C, Coffee first)
+     - **Cleaning Capsules** (`130 ml` Coffee + `0 ml` Water, Extra Hot ~90°C)
+     - Plus **Great Americano XL (Split-Temp)** and multi-stage **Cleaning Capsule / Pre-Infusion Bloom** cycles.
+3. **Full Library Organization, Reordering & Renaming**:
+   - **Reordering**: Move Up 🔼 and Move Down 🔽 buttons on every saved item to reorder your favorites.
+   - **Renaming**: Inline ✏️ Rename modal for changing any recipe name anytime.
+   - **Edit / Tweak**: 🎛️ Edit button that loads any existing recipe back into the Custom or Bloom builder for tweaking.
+   - **Restore Curated**: 1-tap button to restore the Nespresso app suggestions if desired.
+4. **Named Custom Recipes & Cycles**:
+   - Direct recipe name input fields in both Custom Recipe (`inputCustomRecipeName`) and Bloom Lab (`inputBloomRecipeName`) builders before saving.
+5. **Physical Rotary Dial Cup-Size Calibration Profiles (`Machine` Tab)**:
+   - **Factory Defaults (Optimal)**: Ristretto 25ml, Espresso 40ml, Lungo 110ml, Hot Water 200ml, Americano Coffee 25ml, Americano Water 125ml.
+   - **My App Calibration**: Replicates the calibrated machine settings (Ristretto 25ml, Espresso 40ml, Lungo 80ml, Hot Water 230ml, Americano Coffee 40ml, Americano Water 140ml = 180ml total).
+6. **Hardware Capabilities Preserved from v0.2.0**:
+   - Ingredient pour sequence (`Coffee → Water` vs. `Water → Coffee` Long Black).
+   - Full volumetric ranges: Coffee `0` or `15–130 ml` + Hot Water `0` or `25–300 ml` (up to `430 ml` combined).
+   - Split-Temperature two-stage brewing ("Great Americano XL": `40 ml` Max Temp Coffee + `160 ml` Warm Water).
+   - In-chamber water-pause soak lab (`BrewOperations.LONG_BREW_TIMEOUT = 300s` 5-minute pause window).
+   - Hardware countdown delayed brew scheduler (`06aa3a32`).
+   - Auto-off standby delay (`9m`, `30m`, `2h`, `8h`) & water hardness (`0–4`) via `06aa3a44`.
+   - Real-time 48-bit `MachineStatus` (`06aa3a12`) and `CommandResponse` (`06aa3a52`) telemetry decoding.
 
 ---
 

@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23C88D4B'><path d='M2 21h18v-2H2v2M20 8h-2V5h2m0-2H4v10a4 4 0 004 4h6a4 4 0 004-4v-3h2a2 2 0 002-2V5a2 2 0 00-2-2z'/></svg>">
 
-  <link rel="stylesheet" href="styles.css?v=0.2.0">
+  <link rel="stylesheet" href="styles.css?v=0.3.0">
 </head>
 <body>
   <div class="app-container">
@@ -22,7 +22,7 @@
       <div class="brand">
         <div class="logo-icon">☕</div>
         <div>
-          <h1>Notpresso <span class="badge-expert">Expert</span> <span class="badge-version">v0.2.0</span></h1>
+          <h1>Notpresso <span class="badge-expert">Expert</span> <span class="badge-version">v0.3.0</span></h1>
           <p id="envSubtitle" class="subtitle">EN 350.G Offline BLE Controller</p>
         </div>
       </div>
@@ -70,7 +70,7 @@
       <button class="nav-tab active" data-tab="tab-presets">Presets</button>
       <button class="nav-tab" data-tab="tab-custom">Custom</button>
       <button class="nav-tab" data-tab="tab-bloom">Bloom/Clean</button>
-      <button class="nav-tab" data-tab="tab-saved">Library</button>
+      <button class="nav-tab" data-tab="tab-saved">Library & Favorites</button>
       <button class="nav-tab" data-tab="tab-machine">Machine</button>
     </nav>
 
@@ -153,6 +153,18 @@
           </div>
           <span class="action-tag">Dispense</span>
         </button>
+      </div>
+
+      <!-- Favorite & Suggested Recipes (Curated from Nespresso App + Custom) -->
+      <div class="card" style="margin-top:14px;">
+        <div class="slider-header">
+          <label class="card-title" style="margin-bottom:0;">⭐ My Favorites & Suggestions</label>
+          <button type="button" id="btnJumpToLibrary" class="btn-xs">Manage in Library ↗</button>
+        </div>
+        <p class="card-desc" style="margin-top:4px;">1-tap custom brews calibrated to your taste. Reorder, rename, or edit anytime in the Library tab.</p>
+        <div id="homeFavoritesList" class="home-favorites-grid">
+          <!-- Rendered dynamically from state.savedRecipes -->
+        </div>
       </div>
 
       <!-- Hardware Delayed / Scheduled Brew Card (03 05 07 04 <uint32_sec> <temp> <id> + 06aa3a32) -->
@@ -304,14 +316,24 @@
           </div>
         </div>
 
-        <!-- Action Buttons -->
+        <!-- Recipe Name & Action Buttons -->
+        <div class="form-group" style="margin-top:12px;">
+          <label class="form-label" for="inputCustomRecipeName">Recipe Name</label>
+          <input type="text" id="inputCustomRecipeName" class="styled-input" placeholder="e.g. Espresso Long Americano" maxlength="45">
+        </div>
+
         <div class="btn-stack">
           <button id="btnBrewCustom" class="btn btn-primary btn-large">
             <span>☕</span> <span id="btnBrewCustomLabel">Start Custom Extraction</span>
           </button>
-          <button id="btnSaveCustom" class="btn btn-outline">
-            <span>💾</span> Save to My Library
-          </button>
+          <div class="btn-row">
+            <button id="btnSaveCustom" class="btn btn-outline" style="flex:1;">
+              <span>💾</span> Save to Library
+            </button>
+            <button id="btnUpdateCustom" class="btn btn-outline hidden" style="flex:1;">
+              <span>🔄</span> Update Existing
+            </button>
+          </div>
         </div>
       </div>
     </main>
@@ -390,6 +412,11 @@
           </ol>
         </div>
 
+        <div class="form-group" style="margin-top:10px;">
+          <label class="form-label" for="inputBloomRecipeName">Cycle Name</label>
+          <input type="text" id="inputBloomRecipeName" class="styled-input" placeholder="e.g. Cleaning Capsule (40ml → 60s → 130ml)" maxlength="45">
+        </div>
+
         <div class="btn-stack">
           <button id="btnStartWaterPauseCycle" class="btn btn-primary btn-large">
             <span>💧⏸️</span> Start In-Chamber Water-Pause Soak
@@ -404,12 +431,21 @@
       </div>
     </main>
 
-    <!-- TAB 4: SAVED LIBRARY -->
+    <!-- TAB 4: SAVED LIBRARY & FAVORITES -->
     <main id="tab-saved" class="tab-pane">
       <div class="library-header">
-        <h2 class="card-title">Saved Recipes</h2>
+        <div>
+          <h2 class="card-title" style="margin-bottom:2px;">⭐ My Favorites & Library</h2>
+          <p class="card-desc" style="margin:0;">Organize, rename, reorder, and brew your favorite recipes.</p>
+        </div>
         <span id="libraryCount" class="badge-count">0 items</span>
       </div>
+
+      <div class="quick-chips-row" style="margin-top:10px; margin-bottom:12px;">
+        <button type="button" id="btnLibAddCustom" class="chip-btn active-chip">➕ Craft New Recipe</button>
+        <button type="button" id="btnRestoreCurated" class="chip-btn">🔄 Restore Nespresso App Favorites</button>
+      </div>
+
       <div id="libraryList" class="library-list">
         <!-- Rendered dynamically -->
       </div>
@@ -446,6 +482,16 @@
         <div class="btn-row">
           <button id="btnReadCupSize" class="btn btn-outline" style="flex:1;">📖 Read from Machine</button>
           <button id="btnWriteCupSize" class="btn btn-primary" style="flex:1; padding:12px;">💾 Save to Dial</button>
+        </div>
+
+        <!-- Quick Dial Calibration Profiles -->
+        <div class="form-group" style="margin-top:14px; margin-bottom:0;">
+          <label class="form-label">Quick Cup Size Calibration Profiles</label>
+          <div class="quick-chips-row" style="margin-top:6px;">
+            <button type="button" id="btnProfileFactoryDefaults" class="chip-btn">🏭 Factory Defaults (25 / 40 / 110 / 200 / 25 / 125)</button>
+            <button type="button" id="btnProfileAppCalibration" class="chip-btn active-chip">📱 My App Calibration (25 / 40 / 80 / 230 / 40 / 140)</button>
+          </div>
+          <small class="field-hint">Select a profile to quickly configure rotary dial target slider values.</small>
         </div>
       </div>
 
@@ -579,7 +625,27 @@
               <li>Paste the resulting 16-char key above and tap <strong>Connect</strong>!</li>
             </ol>
           </div>
-          <div class="settings-version-tag">Notpresso Expert v0.2.0 • Offline BLE Controller</div>
+          <div class="settings-version-tag">Notpresso Expert v0.3.0 • Offline BLE Controller</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rename Recipe Modal -->
+    <div id="renameModal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Rename Recipe</h3>
+          <button id="btnCloseRename" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="inputRenameName">Recipe Name</label>
+            <input type="text" id="inputRenameName" class="styled-input" placeholder="Enter recipe name" maxlength="45">
+          </div>
+          <div class="btn-row" style="margin-top:14px;">
+            <button id="btnCancelRename" class="btn btn-outline" style="flex:1;">Cancel</button>
+            <button id="btnSaveRename" class="btn btn-primary" style="flex:1;">Save Name</button>
+          </div>
         </div>
       </div>
     </div>
@@ -597,7 +663,7 @@
             <span id="logCounter" class="log-counter">0 events</span>
           </div>
           <div id="logConsole" class="log-console">
-            <div class="log-entry info">[System] Notpresso Expert v0.2.0 ready to connect to EN 350.G</div>
+            <div class="log-entry info">[System] Notpresso Expert v0.3.0 ready to connect to EN 350.G</div>
           </div>
         </div>
       </div>
@@ -607,6 +673,6 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="app.js?v=0.2.0"></script>
+  <script src="app.js?v=0.3.0"></script>
 </body>
 </html>

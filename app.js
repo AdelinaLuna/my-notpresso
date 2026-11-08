@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.3.0';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -127,7 +127,9 @@ const state = {
   serialNumber: '--',
   firmwareVersion: '--',
 
-  savedRecipes: []
+  savedRecipes: [],
+  editingRecipeId: null,
+  renamingRecipeIndex: null
 };
 
 // 3. DOM Elements Cache
@@ -150,6 +152,8 @@ const el = {
   tempButtons: document.querySelectorAll('.temp-btn'),
   drinkCards: document.querySelectorAll('.drink-card[data-size]'),
   btnGreatAmericanoPreset: document.getElementById('btnGreatAmericanoPreset'),
+  homeFavoritesList: document.getElementById('homeFavoritesList'),
+  btnJumpToLibrary: document.getElementById('btnJumpToLibrary'),
   badgeScheduleStatus: document.getElementById('badgeScheduleStatus'),
   selectScheduleDrink: document.getElementById('selectScheduleDrink'),
   selectScheduleDelay: document.getElementById('selectScheduleDelay'),
@@ -172,9 +176,11 @@ const el = {
   valWaterMl: document.getElementById('valWaterMl'),
   valTotalMl: document.getElementById('valTotalMl'),
   valRatio: document.getElementById('valRatio'),
+  inputCustomRecipeName: document.getElementById('inputCustomRecipeName'),
   btnBrewCustom: document.getElementById('btnBrewCustom'),
   btnBrewCustomLabel: document.getElementById('btnBrewCustomLabel'),
   btnSaveCustom: document.getElementById('btnSaveCustom'),
+  btnUpdateCustom: document.getElementById('btnUpdateCustom'),
 
   // Tab 3: Bloom & Cleaning Capsule Lab
   btnPresetCleaning: document.getElementById('btnPresetCleaning'),
@@ -187,6 +193,7 @@ const el = {
   sliderBloomPhase2Ml: document.getElementById('sliderBloomPhase2Ml'),
   valBloomPhase2Ml: document.getElementById('valBloomPhase2Ml'),
   tempButtonsBloom: document.querySelectorAll('.temp-btn-bloom'),
+  inputBloomRecipeName: document.getElementById('inputBloomRecipeName'),
   btnStartWaterPauseCycle: document.getElementById('btnStartWaterPauseCycle'),
   btnStartTwoStageMacro: document.getElementById('btnStartTwoStageMacro'),
   btnSaveBloomRecipe: document.getElementById('btnSaveBloomRecipe'),
@@ -194,6 +201,8 @@ const el = {
   // Tab 4: Saved Library
   libraryList: document.getElementById('libraryList'),
   libraryCount: document.getElementById('libraryCount'),
+  btnLibAddCustom: document.getElementById('btnLibAddCustom'),
+  btnRestoreCurated: document.getElementById('btnRestoreCurated'),
 
   // Tab 5: Machine & Dial Config
   selectCupTarget: document.getElementById('selectCupTarget'),
@@ -202,6 +211,8 @@ const el = {
   hintCupRange: document.getElementById('hintCupRange'),
   btnReadCupSize: document.getElementById('btnReadCupSize'),
   btnWriteCupSize: document.getElementById('btnWriteCupSize'),
+  btnProfileFactoryDefaults: document.getElementById('btnProfileFactoryDefaults'),
+  btnProfileAppCalibration: document.getElementById('btnProfileAppCalibration'),
   btnReadUserSettings: document.getElementById('btnReadUserSettings'),
   selectStandbyDelay: document.getElementById('selectStandbyDelay'),
   btnWriteStandby: document.getElementById('btnWriteStandby'),
@@ -226,6 +237,13 @@ const el = {
   btnTriggerSoakTimer: document.getElementById('btnTriggerSoakTimer'),
   btnResumeAfterSoak: document.getElementById('btnResumeAfterSoak'),
   btnStopBrew: document.getElementById('btnStopBrew'),
+
+  // Rename Modal
+  renameModal: document.getElementById('renameModal'),
+  inputRenameName: document.getElementById('inputRenameName'),
+  btnSaveRename: document.getElementById('btnSaveRename'),
+  btnCancelRename: document.getElementById('btnCancelRename'),
+  btnCloseRename: document.getElementById('btnCloseRename'),
 
   // Settings & Logs Modals
   btnSettings: document.getElementById('btnSettings'),
@@ -327,76 +345,148 @@ function setStoredAuthKey(hexStr) {
   return normalized;
 }
 
-// 6. Saved Recipes Persistence
+// 6. Curated Favorites & Library Persistence (from Nespresso App setup + advanced cycles)
+const DEFAULT_FAVORITE_RECIPES = [
+  {
+    id: 'fav-water-lungo-extra-hot',
+    name: 'Water Lungo Extra Hot',
+    kind: 'custom',
+    coffeeMl: 0,
+    waterMl: 270,
+    splitTemp: false,
+    temp: 2, // Extra Hot ~90°C
+    seq: 'coffee-first'
+  },
+  {
+    id: 'fav-water-lazy-hot-pots',
+    name: 'Water Lazy Hot Pots',
+    kind: 'custom',
+    coffeeMl: 0,
+    waterMl: 200,
+    splitTemp: false,
+    temp: 2, // Extra Hot ~90°C
+    seq: 'coffee-first'
+  },
+  {
+    id: 'fav-espresso-long-americano',
+    name: 'Espresso Long Americano',
+    kind: 'custom',
+    coffeeMl: 40,
+    waterMl: 160,
+    splitTemp: false,
+    temp: 2, // Extra Hot ~90°C
+    seq: 'coffee-first'
+  },
+  {
+    id: 'fav-espresso-medium-americano',
+    name: 'Espresso Medium Americano',
+    kind: 'custom',
+    coffeeMl: 40,
+    waterMl: 120,
+    splitTemp: false,
+    temp: 0, // Hot ~85°C
+    seq: 'coffee-first'
+  },
+  {
+    id: 'fav-espresso-short-americano',
+    name: 'Espresso Short Americano',
+    kind: 'custom',
+    coffeeMl: 40,
+    waterMl: 70,
+    splitTemp: false,
+    temp: 1, // Warm ~80°C
+    seq: 'coffee-first'
+  },
+  {
+    id: 'fav-ristretto-lungo-americano',
+    name: 'Ristretto Lungo Americano',
+    kind: 'custom',
+    coffeeMl: 25,
+    waterMl: 115,
+    splitTemp: false,
+    temp: 0, // Hot ~85°C
+    seq: 'coffee-first'
+  },
+  {
+    id: 'fav-ristretto-medium-american',
+    name: 'Ristretto Medium American',
+    kind: 'custom',
+    coffeeMl: 25,
+    waterMl: 85,
+    splitTemp: false,
+    temp: 0, // Hot ~85°C
+    seq: 'coffee-first'
+  },
+  {
+    id: 'fav-ristretto-short-americano',
+    name: 'Ristretto Short Americano',
+    kind: 'custom',
+    coffeeMl: 25,
+    waterMl: 55,
+    splitTemp: false,
+    temp: 1, // Warm ~80°C
+    seq: 'coffee-first'
+  },
+  {
+    id: 'fav-cleaning-capsules',
+    name: 'Cleaning Capsules',
+    kind: 'custom',
+    coffeeMl: 130,
+    waterMl: 0,
+    splitTemp: false,
+    temp: 2, // Extra Hot ~90°C
+    seq: 'coffee-first'
+  },
+  {
+    id: 'preset-great-americano',
+    name: 'Great Americano XL (Split-Temp)',
+    kind: 'custom',
+    coffeeMl: 40,
+    waterMl: 160,
+    splitTemp: true,
+    coffeeTemp: 2, // Extra Hot 90°C
+    waterTemp: 1,  // Warm 80°C
+    temp: 0,
+    seq: 'coffee-first'
+  },
+  {
+    id: 'preset-cleaning-capsule-soak',
+    name: 'Cleaning Capsule (40ml → 60s → 130ml)',
+    kind: 'bloom',
+    phase1Ml: 40,
+    waitSec: 60,
+    phase2Ml: 130,
+    temp: 2,
+    mode: 'water-pause'
+  },
+  {
+    id: 'preset-bloom-espresso',
+    name: 'Pre-Infusion Bloom Espresso (15ml → 10s → 30ml)',
+    kind: 'bloom',
+    phase1Ml: 15,
+    waitSec: 10,
+    phase2Ml: 30,
+    temp: 2,
+    mode: 'water-pause'
+  }
+];
+
 function loadSavedRecipes() {
   try {
-    const raw = localStorage.getItem('notpresso_saved_recipes_v2');
+    const raw = localStorage.getItem('notpresso_saved_recipes_v3');
     if (raw) {
       state.savedRecipes = JSON.parse(raw);
     } else {
-      state.savedRecipes = [
-        {
-          id: 'preset-great-americano',
-          name: 'Great Americano XL (Split-Temp)',
-          kind: 'custom',
-          coffeeMl: 40,
-          waterMl: 160,
-          splitTemp: true,
-          coffeeTemp: 2, // Max 90°C
-          waterTemp: 1,  // Warm 80°C
-          temp: 0,
-          seq: 'coffee-first'
-        },
-        {
-          id: 'preset-long-black',
-          name: 'Crema Long Black (Water First)',
-          kind: 'custom',
-          coffeeMl: 40,
-          waterMl: 120,
-          splitTemp: false,
-          temp: 2,
-          seq: 'water-first'
-        },
-        {
-          id: 'preset-max-lungo',
-          name: 'Max Lungo Extraction (130ml)',
-          kind: 'custom',
-          coffeeMl: 130,
-          waterMl: 0,
-          splitTemp: false,
-          temp: 0,
-          seq: 'coffee-first'
-        },
-        {
-          id: 'preset-cleaning-capsule',
-          name: 'Cleaning Capsule (40ml → 60s → 130ml)',
-          kind: 'bloom',
-          phase1Ml: 40,
-          waitSec: 60,
-          phase2Ml: 130,
-          temp: 2,
-          mode: 'water-pause'
-        },
-        {
-          id: 'preset-bloom-espresso',
-          name: 'Pre-Infusion Bloom Espresso (15ml → 10s → 30ml)',
-          kind: 'bloom',
-          phase1Ml: 15,
-          waitSec: 10,
-          phase2Ml: 30,
-          temp: 2,
-          mode: 'water-pause'
-        }
-      ];
+      state.savedRecipes = JSON.parse(JSON.stringify(DEFAULT_FAVORITE_RECIPES));
       persistSavedRecipes();
     }
   } catch (e) {
-    state.savedRecipes = [];
+    state.savedRecipes = JSON.parse(JSON.stringify(DEFAULT_FAVORITE_RECIPES));
   }
 }
 
 function persistSavedRecipes() {
-  localStorage.setItem('notpresso_saved_recipes_v2', JSON.stringify(state.savedRecipes));
+  localStorage.setItem('notpresso_saved_recipes_v3', JSON.stringify(state.savedRecipes));
 }
 
 // 7. BLE Read / Write / Connect Abstraction
@@ -1409,13 +1499,14 @@ function updateCupRangeHint() {
   el.hintCupRange.textContent = `Hardware allowed range: ${min} ml – ${max} ml (Factory default: ${def} ml)`;
 }
 
-// 14. Saved Library UI
+// 14. Saved Library & Favorites UI
 function renderLibrary() {
+  if (!el.libraryList) return;
   el.libraryList.innerHTML = '';
   el.libraryCount.textContent = `${state.savedRecipes.length} items`;
 
   if (state.savedRecipes.length === 0) {
-    el.libraryList.innerHTML = '<div class="alert alert-warning">No saved recipes. Craft one in the Custom or Bloom/Clean tab!</div>';
+    el.libraryList.innerHTML = '<div class="alert alert-warning" style="text-align:center;">No saved recipes. Craft one in Custom or tap "Restore Nespresso App Favorites"!</div>';
     return;
   }
 
@@ -1424,10 +1515,12 @@ function renderLibrary() {
     item.className = 'recipe-item';
 
     let details = '';
+    let totalMl = 0;
     if (recipe.kind === 'bloom') {
-      details = `${recipe.phase1Ml}ml Phase 1 → ${recipe.waitSec}s Soak → ${recipe.phase2Ml}ml Phase 2 • ${getTempLabel(recipe.temp)}`;
+      totalMl = (recipe.phase1Ml || 0) + (recipe.phase2Ml || 0);
+      details = `${recipe.phase1Ml}ml Phase 1 → ${recipe.waitSec}s Soak → ${recipe.phase2Ml}ml Phase 2 (${totalMl}ml) • ${getTempLabel(recipe.temp)}`;
     } else {
-      const totalMl = recipe.coffeeMl + recipe.waterMl;
+      totalMl = (recipe.coffeeMl || 0) + (recipe.waterMl || 0);
       const seqLabel = recipe.seq === 'water-first' ? 'Water→Coffee' : 'Coffee→Water';
       const tempDesc = recipe.splitTemp
         ? `Split: ☕${getTempLabel(recipe.coffeeTemp)} / 💧${getTempLabel(recipe.waterTemp)}`
@@ -1435,19 +1528,56 @@ function renderLibrary() {
       details = `${recipe.coffeeMl}ml coffee + ${recipe.waterMl}ml water (${totalMl}ml) • ${tempDesc} • ${seqLabel}`;
     }
 
+    const isFirst = idx === 0;
+    const isLast = idx === state.savedRecipes.length - 1;
+
     item.innerHTML = `
-      <div>
-        <div class="recipe-meta-name">${escapeHtml(recipe.name)}</div>
+      <div class="recipe-reorder-col">
+        <button class="btn-reorder btn-move-up" data-idx="${idx}" ${isFirst ? 'disabled' : ''} title="Move Up">▲</button>
+        <button class="btn-reorder btn-move-down" data-idx="${idx}" ${isLast ? 'disabled' : ''} title="Move Down">▼</button>
+      </div>
+      <div class="recipe-info-col">
+        <div class="recipe-name-row">
+          <span class="recipe-meta-name">${escapeHtml(recipe.name)}</span>
+          <button class="btn-inline-rename" data-idx="${idx}" title="Rename">✏️</button>
+        </div>
         <div class="recipe-meta-details">${escapeHtml(details)}</div>
       </div>
       <div class="recipe-actions">
         <button class="btn btn-connect btn-brew-saved" data-idx="${idx}">Brew</button>
+        <button class="icon-btn btn-edit-saved" data-idx="${idx}" title="Edit / Tweak in Custom Tab">🎛️</button>
         <button class="icon-btn btn-del-saved" data-idx="${idx}" title="Delete">🗑️</button>
       </div>
     `;
     el.libraryList.appendChild(item);
   });
 
+  // Reorder buttons
+  document.querySelectorAll('.btn-move-up').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      moveRecipe(idx, -1);
+    });
+  });
+  document.querySelectorAll('.btn-move-down').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      moveRecipe(idx, 1);
+    });
+  });
+
+  // Rename buttons
+  document.querySelectorAll('.btn-inline-rename').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      openRenameModal(idx);
+    });
+  });
+
+  // Brew buttons
   document.querySelectorAll('.btn-brew-saved').forEach(b => {
     b.addEventListener('click', (e) => {
       const idx = parseInt(e.currentTarget.dataset.idx, 10);
@@ -1461,25 +1591,197 @@ function renderLibrary() {
     });
   });
 
+  // Edit buttons
+  document.querySelectorAll('.btn-edit-saved').forEach(b => {
+    b.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      editRecipeInCustomTab(idx);
+    });
+  });
+
+  // Delete buttons
   document.querySelectorAll('.btn-del-saved').forEach(b => {
     b.addEventListener('click', (e) => {
       const idx = parseInt(e.currentTarget.dataset.idx, 10);
-      state.savedRecipes.splice(idx, 1);
-      persistSavedRecipes();
-      renderLibrary();
-      showToast('Recipe deleted');
+      const r = state.savedRecipes[idx];
+      if (confirm(`Delete "${r.name}" from library?`)) {
+        state.savedRecipes.splice(idx, 1);
+        persistSavedRecipes();
+        renderLibrary();
+        renderFavoritesOnHome();
+        showToast('Recipe deleted');
+      }
     });
   });
 }
 
+function renderFavoritesOnHome() {
+  if (!el.homeFavoritesList) return;
+  el.homeFavoritesList.innerHTML = '';
+
+  if (state.savedRecipes.length === 0) {
+    el.homeFavoritesList.innerHTML = '<div class="card-desc" style="text-align:center; padding:12px;">No favorites yet. Add one in Custom or restore from Library!</div>';
+    return;
+  }
+
+  state.savedRecipes.forEach((recipe, idx) => {
+    const card = document.createElement('div');
+    card.className = 'home-favorite-card';
+
+    let totalMl = 0;
+    let desc = '';
+    if (recipe.kind === 'bloom') {
+      totalMl = (recipe.phase1Ml || 0) + (recipe.phase2Ml || 0);
+      desc = `${recipe.phase1Ml}ml Phase 1 → ${recipe.waitSec}s Soak → ${recipe.phase2Ml}ml Phase 2 • ${getTempLabel(recipe.temp)}`;
+    } else {
+      totalMl = (recipe.coffeeMl || 0) + (recipe.waterMl || 0);
+      const tempDesc = recipe.splitTemp
+        ? `Split: ☕${getTempLabel(recipe.coffeeTemp)} / 💧${getTempLabel(recipe.waterTemp)}`
+        : getTempLabel(recipe.temp);
+      const seqLabel = recipe.seq === 'water-first' ? 'Water first' : 'Coffee first';
+      desc = `${recipe.coffeeMl}ml coffee + ${recipe.waterMl}ml water • ${tempDesc} • ${seqLabel}`;
+    }
+
+    card.innerHTML = `
+      <div class="home-fav-info">
+        <div class="home-fav-top">
+          <span class="home-fav-name">${escapeHtml(recipe.name)}</span>
+          <span class="home-fav-vol">${totalMl} ml</span>
+        </div>
+        <div class="home-fav-desc">${escapeHtml(desc)}</div>
+      </div>
+      <div class="home-fav-actions">
+        <button class="btn btn-connect btn-home-fav-brew" data-idx="${idx}" style="padding:6px 14px; font-size:12px;">Brew</button>
+        <button class="icon-btn btn-home-fav-edit" data-idx="${idx}" title="Edit in Custom Tab">🎛️</button>
+      </div>
+    `;
+    el.homeFavoritesList.appendChild(card);
+  });
+
+  document.querySelectorAll('.btn-home-fav-brew').forEach(b => {
+    b.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      const r = state.savedRecipes[idx];
+      if (!r) return;
+      if (r.kind === 'bloom') {
+        startWaterPauseSoakWorkflow(r.phase1Ml, r.waitSec, r.phase2Ml, r.temp);
+      } else {
+        brewCustomRecipe(r.coffeeMl, r.waterMl, r);
+      }
+    });
+  });
+
+  document.querySelectorAll('.btn-home-fav-edit').forEach(b => {
+    b.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      editRecipeInCustomTab(idx);
+    });
+  });
+}
+
+function moveRecipe(idx, delta) {
+  const targetIdx = idx + delta;
+  if (targetIdx < 0 || targetIdx >= state.savedRecipes.length) return;
+  const temp = state.savedRecipes[idx];
+  state.savedRecipes[idx] = state.savedRecipes[targetIdx];
+  state.savedRecipes[targetIdx] = temp;
+  persistSavedRecipes();
+  renderLibrary();
+  renderFavoritesOnHome();
+  showToast(`Moved "${temp.name}" ${delta < 0 ? 'up' : 'down'}`);
+}
+
+function openRenameModal(idx) {
+  const r = state.savedRecipes[idx];
+  if (!r) return;
+  state.renamingRecipeIndex = idx;
+  el.inputRenameName.value = r.name;
+  el.renameModal.classList.remove('hidden');
+  el.inputRenameName.focus();
+  el.inputRenameName.select();
+}
+
+function closeRenameModal() {
+  el.renameModal.classList.add('hidden');
+  state.renamingRecipeIndex = null;
+}
+
+function saveRename() {
+  if (state.renamingRecipeIndex === null) return;
+  const newName = el.inputRenameName.value.trim();
+  if (!newName) {
+    showToast('Please enter a recipe name');
+    return;
+  }
+  const r = state.savedRecipes[state.renamingRecipeIndex];
+  r.name = newName;
+  persistSavedRecipes();
+  renderLibrary();
+  renderFavoritesOnHome();
+  closeRenameModal();
+  showToast(`Renamed to "${newName}"`);
+}
+
+function switchTab(tabId) {
+  el.navTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
+  el.tabPanes.forEach(p => p.classList.toggle('active', p.id === tabId));
+}
+
+function editRecipeInCustomTab(idx) {
+  const r = state.savedRecipes[idx];
+  if (!r) return;
+
+  if (r.kind === 'bloom') {
+    state.bloomPhase1Ml = r.phase1Ml || 40;
+    state.bloomWaitSec = r.waitSec || 60;
+    state.bloomPhase2Ml = r.phase2Ml || 130;
+    state.bloomTemp = r.temp !== undefined ? r.temp : 2;
+
+    el.sliderBloomPhase1Ml.value = state.bloomPhase1Ml;
+    el.valBloomPhase1Ml.textContent = `${state.bloomPhase1Ml} ml`;
+    el.sliderBloomWaitSec.value = state.bloomWaitSec;
+    el.valBloomWaitSec.textContent = `${state.bloomWaitSec} sec`;
+    el.sliderBloomPhase2Ml.value = state.bloomPhase2Ml;
+    el.valBloomPhase2Ml.textContent = `${state.bloomPhase2Ml} ml`;
+    if (el.inputBloomRecipeName) el.inputBloomRecipeName.value = r.name;
+
+    el.tempButtonsBloom.forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.bloomTemp);
+    });
+
+    switchTab('tab-bloom');
+    showToast(`Loaded "${r.name}" in Bloom/Clean tab`);
+    return;
+  }
+
+  // Custom recipe
+  state.customCoffeeMl = r.coffeeMl !== undefined ? r.coffeeMl : 40;
+  state.customWaterMl = r.waterMl !== undefined ? r.waterMl : 160;
+  state.customSplitTemp = !!r.splitTemp;
+  state.customCoffeeTemp = r.coffeeTemp !== undefined ? r.coffeeTemp : (r.temp || 2);
+  state.customWaterTemp = r.waterTemp !== undefined ? r.waterTemp : (r.temp || 1);
+  state.customTemp = r.temp !== undefined ? r.temp : 0;
+  state.customSequence = r.seq || 'coffee-first';
+  state.editingRecipeId = r.id;
+
+  if (el.inputCustomRecipeName) el.inputCustomRecipeName.value = r.name;
+  if (el.btnUpdateCustom) el.btnUpdateCustom.classList.remove('hidden');
+
+  syncCustomRecipeUI();
+  switchTab('tab-custom');
+  showToast(`Loaded "${r.name}" for editing`);
+}
+
 function saveCurrentCustomRecipe() {
-  const defaultName = state.customSplitTemp ? 'Split-Temp Americano' : 'My Custom Brew';
-  const name = prompt('Enter a name for this recipe:', defaultName);
-  if (!name || !name.trim()) return;
+  const inputName = el.inputCustomRecipeName ? el.inputCustomRecipeName.value.trim() : '';
+  const defaultName = state.customSplitTemp
+    ? 'Split-Temp Americano'
+    : (state.customCoffeeMl === 0 ? 'Hot Water Dispense' : `${state.customCoffeeMl}ml Coffee Recipe`);
+  const name = inputName || defaultName;
 
   const newRecipe = {
     id: Date.now().toString(),
-    name: name.trim(),
+    name: name,
     kind: 'custom',
     coffeeMl: state.customCoffeeMl,
     waterMl: state.customWaterMl,
@@ -1491,18 +1793,49 @@ function saveCurrentCustomRecipe() {
   };
 
   state.savedRecipes.unshift(newRecipe);
+  state.editingRecipeId = newRecipe.id;
+  if (el.btnUpdateCustom) el.btnUpdateCustom.classList.remove('hidden');
   persistSavedRecipes();
   renderLibrary();
-  showToast(`Saved "${newRecipe.name}"`);
+  renderFavoritesOnHome();
+  showToast(`Saved "${newRecipe.name}" to Library!`);
+}
+
+function updateCurrentCustomRecipe() {
+  if (!state.editingRecipeId) {
+    saveCurrentCustomRecipe();
+    return;
+  }
+  const idx = state.savedRecipes.findIndex(r => r.id === state.editingRecipeId);
+  if (idx === -1) {
+    saveCurrentCustomRecipe();
+    return;
+  }
+
+  const inputName = el.inputCustomRecipeName ? el.inputCustomRecipeName.value.trim() : '';
+  const existing = state.savedRecipes[idx];
+  existing.name = inputName || existing.name;
+  existing.coffeeMl = state.customCoffeeMl;
+  existing.waterMl = state.customWaterMl;
+  existing.splitTemp = state.customSplitTemp;
+  existing.coffeeTemp = state.customCoffeeTemp;
+  existing.waterTemp = state.customWaterTemp;
+  existing.temp = state.customTemp;
+  existing.seq = state.customSequence;
+
+  persistSavedRecipes();
+  renderLibrary();
+  renderFavoritesOnHome();
+  showToast(`Updated "${existing.name}"!`);
 }
 
 function saveCurrentBloomRecipe() {
-  const name = prompt('Enter a name for this Bloom / Cleaning cycle:', 'Cleaning Capsule Cycle');
-  if (!name || !name.trim()) return;
+  const inputName = el.inputBloomRecipeName ? el.inputBloomRecipeName.value.trim() : '';
+  const name = inputName || 'Cleaning Capsule Cycle';
 
   const newRecipe = {
     id: Date.now().toString(),
-    name: name.trim(),
+    name: name,
     kind: 'bloom',
     phase1Ml: state.bloomPhase1Ml,
     waitSec: state.bloomWaitSec,
@@ -1514,7 +1847,35 @@ function saveCurrentBloomRecipe() {
   state.savedRecipes.unshift(newRecipe);
   persistSavedRecipes();
   renderLibrary();
+  renderFavoritesOnHome();
   showToast(`Saved "${newRecipe.name}"`);
+}
+
+function restoreCuratedFavorites() {
+  if (confirm('Restore the official Nespresso app favorites + multi-stage cycles to your library?')) {
+    state.savedRecipes = JSON.parse(JSON.stringify(DEFAULT_FAVORITE_RECIPES));
+    persistSavedRecipes();
+    renderLibrary();
+    renderFavoritesOnHome();
+    showToast('Restored Nespresso app favorites!');
+  }
+}
+
+// Machine Dial Quick Profiles
+function applyFactoryDefaultsProfile() {
+  el.selectCupTarget.value = '1'; // Espresso
+  el.inputCupVolume.value = 40;
+  el.valCupTargetMl.textContent = '40 ml';
+  updateCupRangeHint();
+  showToast('Profile: Factory Defaults (25 / 40 / 110 / 200 / 25 / 125)');
+}
+
+function applyAppCalibrationProfile() {
+  el.selectCupTarget.value = '2'; // Lungo (80 ml in screenshot)
+  el.inputCupVolume.value = 80;
+  el.valCupTargetMl.textContent = '80 ml';
+  updateCupRangeHint();
+  showToast('Profile: App Calibration (25 / 40 / 80 / 230 / 40 / 140)');
 }
 
 // 15. Formatting & Byte Helpers
@@ -1692,6 +2053,15 @@ function initListeners() {
     brewCustomRecipe(state.customCoffeeMl, state.customWaterMl);
   });
   el.btnSaveCustom.addEventListener('click', saveCurrentCustomRecipe);
+  if (el.btnUpdateCustom) el.btnUpdateCustom.addEventListener('click', updateCurrentCustomRecipe);
+  if (el.btnJumpToLibrary) el.btnJumpToLibrary.addEventListener('click', () => switchTab('tab-saved'));
+  if (el.btnLibAddCustom) el.btnLibAddCustom.addEventListener('click', () => {
+    state.editingRecipeId = null;
+    if (el.btnUpdateCustom) el.btnUpdateCustom.classList.add('hidden');
+    if (el.inputCustomRecipeName) el.inputCustomRecipeName.value = '';
+    switchTab('tab-custom');
+  });
+  if (el.btnRestoreCurated) el.btnRestoreCurated.addEventListener('click', restoreCuratedFavorites);
 
   // Tab 3: Bloom & Cleaning Capsule Lab
   function applyBloomTemplate(p1, wait, p2, temp, activeBtn) {
@@ -1764,6 +2134,8 @@ function initListeners() {
   });
   el.btnReadCupSize.addEventListener('click', readDialCupSize);
   el.btnWriteCupSize.addEventListener('click', writeDialCupSize);
+  if (el.btnProfileFactoryDefaults) el.btnProfileFactoryDefaults.addEventListener('click', applyFactoryDefaultsProfile);
+  if (el.btnProfileAppCalibration) el.btnProfileAppCalibration.addEventListener('click', applyAppCalibrationProfile);
   el.btnReadUserSettings.addEventListener('click', readUserSettings);
   el.btnWriteStandby.addEventListener('click', writeStandbyDelay);
   el.btnWriteHardness.addEventListener('click', writeWaterHardness);
@@ -1772,6 +2144,22 @@ function initListeners() {
     el.settingsModal.classList.remove('hidden');
   });
   el.btnBleFactoryReset.addEventListener('click', sendBleFactoryReset);
+
+  // Rename Modal
+  if (el.btnSaveRename) el.btnSaveRename.addEventListener('click', saveRename);
+  if (el.btnCancelRename) el.btnCancelRename.addEventListener('click', closeRenameModal);
+  if (el.btnCloseRename) el.btnCloseRename.addEventListener('click', closeRenameModal);
+  if (el.renameModal) {
+    el.renameModal.addEventListener('click', (e) => {
+      if (e.target === el.renameModal) closeRenameModal();
+    });
+  }
+  if (el.inputRenameName) {
+    el.inputRenameName.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') saveRename();
+      else if (e.key === 'Escape') closeRenameModal();
+    });
+  }
 
   // Settings Modal
   el.btnSettings.addEventListener('click', () => {
@@ -1840,6 +2228,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initListeners();
   loadSavedRecipes();
   renderLibrary();
+  renderFavoritesOnHome();
   updateCustomRecipeSummary();
   updateCupRangeHint();
   registerServiceWorker();
