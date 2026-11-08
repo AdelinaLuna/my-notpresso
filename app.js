@@ -138,7 +138,20 @@ const el = {
   toast: document.getElementById('toast'),
 };
 
-// 3. Storage Utilities
+// 3. Storage & Timing Utilities
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function safeWriteValue(characteristic, data) {
+  if (!characteristic) throw new Error('Characteristic is null');
+  if (characteristic.writeValueWithResponse) {
+    try {
+      await characteristic.writeValueWithResponse(data);
+      return;
+    } catch (_) {}
+  }
+  await characteristic.writeValue(data);
+}
+
 function getStoredAuthKey() {
   const k = localStorage.getItem('notpresso_auth_key');
   return (k && k.trim().length === 16) ? k.trim().toUpperCase() : DEFAULT_AUTH_KEY;
@@ -263,19 +276,19 @@ async function connectBle() {
       state.charCapsules = await ctrlService.getCharacteristic(BLE_UUIDS.CHAR_CAPSULES);
     } catch (_) {}
 
+    // Subscribe to Status notifications before handshake so CCCD is open
+    if (state.charMachineStatus) {
+      try {
+        await state.charMachineStatus.startNotifications();
+        state.charMachineStatus.addEventListener('characteristicvaluechanged', handleMachineStatusNotification);
+        log('Active Machine Status notifications enabled.', 'rx');
+      } catch (subErr) {
+        log(`Status notifications subscription note: ${subErr.message}`, 'warn');
+      }
+    }
+
     log('GATT Characteristics cached. Initializing Authentication & Handshake...', 'info');
     await performAuthHandshake();
-
-    // Subscribe to Status notifications
-    if (state.charMachineStatus) {
-      await state.charMachineStatus.startNotifications();
-      state.charMachineStatus.addEventListener('characteristicvaluechanged', handleMachineStatusNotification);
-      log('Active Machine Status notifications enabled.', 'rx');
-      
-      // Read initial status
-      const initialVal = await state.charMachineStatus.readValue();
-      handleMachineStatusData(initialVal);
-    }
 
     state.isConnected = true;
     state.isScanning = false;
@@ -284,6 +297,9 @@ async function connectBle() {
   } catch (err) {
     state.isScanning = false;
     log(`Connection failed: ${err.message}`, 'err');
+    if (err.message && (err.message.includes('disconnected') || err.message.includes('GATT'))) {
+      log('Pairing tip: If this is the first time connecting, put machine in pairing mode: Machine Off -> Hold Brew button 6s (dials flash) -> Turn dial to Lungo -> Press Brew button once (Lungo flashes).', 'warn');
+    }
     updateConnectionUI();
     showToast(`Error: ${err.message}`);
   }
@@ -291,31 +307,47 @@ async function connectBle() {
 
 async function performAuthHandshake() {
   const authKeyHex = getStoredAuthKey();
-  log(`Using Auth Key (CMID): ${authKeyHex}`, 'info');
-
   const authBytes = hexToBytes(authKeyHex);
 
-  // Check pairing state if status char is available
+  if (authBytes.length === 8) {
+    // Ensure high bit is set for CMID (starts with 8 or 9)
+    authBytes[0] |= 0x80;
+  }
+  const formattedKey = bytesToHex(authBytes).replace(/\s+/g, '');
+  log(`Using Auth Key (CMID): ${formattedKey}`, 'info');
+
+  // Check initial pairing state if status char is available
+  let isFinalPairing = false;
   if (state.charMachineStatus) {
     try {
       const statusData = await state.charMachineStatus.readValue();
       const b0 = statusData.getUint8(0);
       const pairingCode = (b0 & 0x60) >> 5; // 0=None, 1=Temp, 2=Final
       log(`Machine initial pairing status: ${pairingCode} (0=None, 1=Temp, 2=Final)`, 'info');
-
-      if (pairingCode !== 2 && state.charTxLevel) {
-        log('Writing TX Level Request [0x01] for pairing...', 'tx');
-        await state.charTxLevel.writeValue(new Uint8Array([0x01]));
+      if (pairingCode === 2) {
+        isFinalPairing = true;
       }
     } catch (e) {
-      log(`Handshake pre-check warning: ${e.message}`, 'warn');
+      log(`Initial status read note: ${e.message}`, 'warn');
+    }
+  }
+
+  // If not confirmed final, send TX Level signal [0x01] to announce pairing handshake
+  if (!isFinalPairing && state.charTxLevel) {
+    try {
+      log('Writing TX Level Request [0x01] for pairing...', 'tx');
+      await safeWriteValue(state.charTxLevel, new Uint8Array([0x01]));
+      await sleep(200);
+    } catch (txErr) {
+      log(`TX Level write note: ${txErr.message}`, 'warn');
     }
   }
 
   // Write Auth Key (CMID) to 06aa3a41
   log(`Writing 8-byte Auth Key to charAuth: ${bytesToHex(authBytes)}`, 'tx');
-  await state.charAuth.writeValue(authBytes);
-  log('Auth Key accepted by machine.', 'info');
+  await safeWriteValue(state.charAuth, authBytes);
+  log('Auth Key written to machine.', 'info');
+  await sleep(200);
 
   // Verify Auth Type
   if (state.charAuthType) {
@@ -324,6 +356,16 @@ async function performAuthHandshake() {
       const code = typeVal.getUint8(0);
       log(`Auth Type confirmation: ${code === 2 ? 'FINAL (Authenticated)' : code}`, 'rx');
       state.pairingState = (code === 2) ? 'FINAL' : 'AUTHENTICATED';
+    } catch (authTypeErr) {
+      log(`Auth Type check note: ${authTypeErr.message}`, 'warn');
+    }
+  }
+
+  // Read current machine status to initialize UI state
+  if (state.charMachineStatus) {
+    try {
+      const initialVal = await state.charMachineStatus.readValue();
+      handleMachineStatusData(initialVal);
     } catch (_) {}
   }
 }
@@ -422,7 +464,7 @@ async function brewPreset(drinkName, sizeCode, tempCode) {
   log(`Triggering ${drinkName} (Size: ${sizeCode}, Temp: ${tempCode}). Payload: ${bytesToHex(payload)}`, 'tx');
 
   try {
-    await state.charCommand.writeValue(payload);
+    await safeWriteValue(state.charCommand, payload);
     log('Brew command sent successfully!', 'info');
     startBrewTracking(`Brewing ${drinkName}`, calculateBrewDuration(sizeCode));
   } catch (err) {
@@ -452,11 +494,11 @@ async function brewCustomRecipe(coffeeMl, waterMl, tempCode) {
   log(`Step 1: Flashing Custom Recipe [Coffee: ${coffeeMl}ml, Water: ${waterMl}ml]: ${bytesToHex(recipePayload)}`, 'tx');
 
   try {
-    await state.charCommand.writeValue(recipePayload);
+    await safeWriteValue(state.charCommand, recipePayload);
     log('Custom Recipe parameters accepted. Dispatching execution trigger...', 'info');
 
     // Step 2: Short delay before execution packet
-    await new Promise(r => setTimeout(r, 250));
+    await sleep(250);
 
     // Step 3: Trigger recipe execution (Type: 0x07 = Custom Recipe)
     const execPayload = new Uint8Array([
@@ -467,7 +509,7 @@ async function brewCustomRecipe(coffeeMl, waterMl, tempCode) {
     ]);
 
     log(`Step 2: Triggering Recipe Execution: ${bytesToHex(execPayload)}`, 'tx');
-    await state.charCommand.writeValue(execPayload);
+    await safeWriteValue(state.charCommand, execPayload);
 
     const estDuration = Math.max(25, Math.round((coffeeMl + waterMl) * 0.35));
     startBrewTracking(`Brewing Custom Recipe (${coffeeMl}ml + ${waterMl}ml)`, estDuration);
@@ -483,7 +525,7 @@ async function emergencyStop() {
   const stopPayload = new Uint8Array([0x01, 0x00]);
   log(`Sending Emergency STOP: ${bytesToHex(stopPayload)}`, 'tx');
   try {
-    await state.charCommand.writeValue(stopPayload);
+    await safeWriteValue(state.charCommand, stopPayload);
     log('Emergency STOP dispatched.', 'warn');
     finishBrewTracking();
     showToast('Brewing cancelled.');
