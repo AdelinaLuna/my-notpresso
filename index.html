@@ -6,14 +6,14 @@
   <title>Notpresso Expert</title>
   
   <!-- PWA & Mobile Meta Tags -->
-  <meta name="theme-color" content="#121316">
+  <meta name="theme-color" content="#101216">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Notpresso">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23C88D4B'><path d='M2 21h18v-2H2v2M20 8h-2V5h2m0-2H4v10a4 4 0 004 4h6a4 4 0 004-4v-3h2a2 2 0 002-2V5a2 2 0 00-2-2z'/></svg>">
 
-  <link rel="stylesheet" href="styles.css?v=0.1.1">
+  <link rel="stylesheet" href="styles.css?v=0.2.0">
 </head>
 <body>
   <div class="app-container">
@@ -22,8 +22,8 @@
       <div class="brand">
         <div class="logo-icon">☕</div>
         <div>
-          <h1>Notpresso <span class="badge-expert">Expert</span> <span class="badge-version">v0.1.1</span></h1>
-          <p class="subtitle">EN 350.G Offline BLE Controller</p>
+          <h1>Notpresso <span class="badge-expert">Expert</span> <span class="badge-version">v0.2.0</span></h1>
+          <p id="envSubtitle" class="subtitle">EN 350.G Offline BLE Controller</p>
         </div>
       </div>
       <div class="header-actions">
@@ -39,7 +39,7 @@
           <span id="connDot" class="status-dot disconnected"></span>
           <div>
             <span id="connStatusText" class="status-label">Disconnected</span>
-            <div id="deviceSubtext" class="status-subtext">Click Connect to scan for Expert EN 350</div>
+            <div id="deviceSubtext" class="status-subtext">Tap Connect to scan for Expert EN 350.G</div>
           </div>
         </div>
         <button id="btnConnect" class="btn btn-connect">
@@ -55,12 +55,12 @@
           <span id="chipMachineState" class="chip-val">Ready</span>
         </div>
         <div class="chip">
-          <span class="chip-label">Security</span>
-          <span id="chipPairingState" class="chip-val">Authenticated</span>
+          <span class="chip-label">Slider</span>
+          <span id="chipSliderState" class="chip-val">--</span>
         </div>
         <div class="chip">
-          <span class="chip-label">Capsules</span>
-          <span id="chipCapsules" class="chip-val">--</span>
+          <span class="chip-label">Auth / Stock</span>
+          <span id="chipPairingState" class="chip-val">--</span>
         </div>
       </div>
     </section>
@@ -68,30 +68,32 @@
     <!-- Navigation Tabs -->
     <nav class="nav-tabs">
       <button class="nav-tab active" data-tab="tab-presets">Presets</button>
-      <button class="nav-tab" data-tab="tab-custom">Custom Recipe</button>
-      <button class="nav-tab" data-tab="tab-saved">My Library</button>
+      <button class="nav-tab" data-tab="tab-custom">Custom</button>
+      <button class="nav-tab" data-tab="tab-bloom">Bloom/Clean</button>
+      <button class="nav-tab" data-tab="tab-saved">Library</button>
+      <button class="nav-tab" data-tab="tab-machine">Machine</button>
     </nav>
 
-    <!-- TAB 1: PRESETS -->
+    <!-- TAB 1: PRESETS & SCHEDULED BREW -->
     <main id="tab-presets" class="tab-pane active">
-      <!-- Temperature Selector -->
+      <!-- Temperature Selector (Verified from TemperatureConversion: 1=LOW, 0=MEDIUM, 2=HIGH) -->
       <div class="card selector-card">
         <label class="card-title">Brew Temperature</label>
         <div class="temp-toggle-group">
-          <button class="temp-btn" data-temp="0">
+          <button class="temp-btn" data-temp="1">
             <span class="temp-indicator temp-warm"></span>
-            <span class="temp-name">Medium</span>
-            <span class="temp-celsius">~83°C</span>
+            <span class="temp-name">Warm (Low)</span>
+            <span class="temp-celsius">~80°C (0x01)</span>
           </button>
-          <button class="temp-btn active" data-temp="1">
+          <button class="temp-btn active" data-temp="0">
             <span class="temp-indicator temp-hot"></span>
-            <span class="temp-name">Hot</span>
-            <span class="temp-celsius">~86°C</span>
+            <span class="temp-name">Hot (Medium)</span>
+            <span class="temp-celsius">~85°C (0x00)</span>
           </button>
           <button class="temp-btn" data-temp="2">
             <span class="temp-indicator temp-veryhot"></span>
-            <span class="temp-name">Extra Hot</span>
-            <span class="temp-celsius">~89°C</span>
+            <span class="temp-name">Extra Hot (Max)</span>
+            <span class="temp-celsius">~90°C (0x02)</span>
           </button>
         </div>
       </div>
@@ -102,7 +104,7 @@
           <div class="drink-icon">☕</div>
           <div class="drink-info">
             <div class="drink-name">Ristretto</div>
-            <div class="drink-vol">25 ml</div>
+            <div class="drink-vol">Rotary Dial Preset (Default 25 ml)</div>
           </div>
           <span class="action-tag">Brew</span>
         </button>
@@ -111,7 +113,7 @@
           <div class="drink-icon">☕</div>
           <div class="drink-info">
             <div class="drink-name">Espresso</div>
-            <div class="drink-vol">40 ml</div>
+            <div class="drink-vol">Rotary Dial Preset (Default 40 ml)</div>
           </div>
           <span class="action-tag">Brew</span>
         </button>
@@ -120,7 +122,7 @@
           <div class="drink-icon">☕</div>
           <div class="drink-info">
             <div class="drink-name">Lungo</div>
-            <div class="drink-vol">110 ml</div>
+            <div class="drink-vol">Rotary Dial Preset (Default 110 ml)</div>
           </div>
           <span class="action-tag">Brew</span>
         </button>
@@ -129,63 +131,164 @@
           <div class="drink-icon">☕💧</div>
           <div class="drink-info">
             <div class="drink-name">Americano</div>
-            <div class="drink-vol">25ml coffee + 125ml water</div>
+            <div class="drink-vol">Rotary Dial Preset (25ml + 125ml)</div>
           </div>
           <span class="action-tag">Brew</span>
+        </button>
+
+        <button id="btnGreatAmericanoPreset" class="drink-card highlight-card">
+          <div class="drink-icon">🔥❄️</div>
+          <div class="drink-info">
+            <div class="drink-name">Great Americano XL <span class="mini-pill">Split-Temp</span></div>
+            <div class="drink-vol">40ml Coffee (Max 90°C) → 160ml Water (Warm 80°C)</div>
+          </div>
+          <span class="action-tag">2-Stage</span>
         </button>
 
         <button class="drink-card" data-drink="hotwater" data-size="4">
           <div class="drink-icon">💧</div>
           <div class="drink-info">
             <div class="drink-name">Hot Water</div>
-            <div class="drink-vol">200 ml</div>
+            <div class="drink-vol">Clean Bypass Spout (Default 200 ml)</div>
           </div>
           <span class="action-tag">Dispense</span>
         </button>
       </div>
+
+      <!-- Hardware Delayed / Scheduled Brew Card (03 05 07 04 <uint32_sec> <temp> <id> + 06aa3a32) -->
+      <div class="card">
+        <div class="slider-header">
+          <label class="card-title" style="margin-bottom:0;">⏰ Hardware Scheduled Brew Timer</label>
+          <span id="badgeScheduleStatus" class="mini-pill">Idle</span>
+        </div>
+        <p class="card-desc" style="margin-top:4px;">Runs on the machine's internal hardware countdown timer (even if your phone disconnects).</p>
+
+        <div class="schedule-row">
+          <select id="selectScheduleDrink" class="styled-input" style="flex:1.2;">
+            <option value="1">Espresso (0x01)</option>
+            <option value="2">Lungo (0x02)</option>
+            <option value="5">Americano (0x05)</option>
+            <option value="0">Ristretto (0x00)</option>
+            <option value="4">Hot Water (0x04)</option>
+            <option value="7">Current Custom Recipe (0x07)</option>
+          </select>
+          <select id="selectScheduleDelay" class="styled-input" style="flex:1;">
+            <option value="60">In 1 min</option>
+            <option value="300">In 5 min</option>
+            <option value="900" selected>In 15 min</option>
+            <option value="1800">In 30 min</option>
+            <option value="3600">In 1 hour</option>
+            <option value="7200">In 2 hours</option>
+          </select>
+        </div>
+
+        <div class="btn-row" style="margin-top:10px;">
+          <button id="btnScheduleBrew" class="btn btn-primary" style="flex:1; padding:10px;">⏰ Set Machine Timer</button>
+          <button id="btnReadSchedule" class="btn btn-outline" style="flex:0.8; padding:10px;">Read (3a32)</button>
+          <button id="btnCancelSchedule" class="btn btn-outline" style="flex:0.6; padding:10px;">Cancel</button>
+        </div>
+      </div>
     </main>
 
-    <!-- TAB 2: CUSTOM RECIPE BUILDER -->
+    <!-- TAB 2: CUSTOM RECIPE & SPLIT-TEMP BUILDER -->
     <main id="tab-custom" class="tab-pane">
       <div class="card recipe-builder-card">
-        <h2 class="card-title">Craft Custom Recipe</h2>
-        <p class="card-desc">Bypass the factory dial presets with milliliter-level volume & ratio calibration.</p>
+        <div class="slider-header">
+          <h2 class="card-title" style="margin-bottom:0;">Craft Custom Recipe</h2>
+          <button id="btnLoadGreatAmericano" class="btn-xs">⚡ Load Great Americano</button>
+        </div>
+        <p class="card-desc" style="margin-top:4px;">Exact 1 ml control (`0` or `15–130 ml` Coffee + `0` or `25–300 ml` Water = up to `430 ml`), pour order, and Split-Temperature 2-stage brewing.</p>
 
-        <!-- Temperature Selection -->
+        <!-- Pour Sequence Selection (IngredientSequence) -->
         <div class="form-group">
-          <label class="form-label">Extraction Temperature</label>
-          <div class="temp-toggle-group compact">
-            <button class="temp-btn-custom" data-temp="0">Medium (83°)</button>
-            <button class="temp-btn-custom active" data-temp="1">Hot (86°)</button>
-            <button class="temp-btn-custom" data-temp="2">Extra Hot (89°)</button>
+          <label class="form-label">Pour Order (`IngredientSequence`)</label>
+          <div class="temp-toggle-group compact" style="margin-top:6px;">
+            <button class="seq-btn-custom temp-btn-custom active" data-seq="coffee-first">☕ → 💧 Coffee First (Americano)</button>
+            <button class="seq-btn-custom temp-btn-custom" data-seq="water-first">💧 → ☕ Water First (Long Black)</button>
           </div>
         </div>
 
-        <!-- Coffee Volume Slider -->
+        <!-- Split Temperature Mode Toggle -->
         <div class="form-group">
           <div class="slider-header">
-            <label class="form-label">Coffee Extraction (ml)</label>
-            <span id="valCoffeeMl" class="slider-badge">40 ml</span>
+            <label class="form-label">Temperature Control</label>
+            <label class="toggle-pill">
+              <input type="checkbox" id="chkSplitTemp">
+              <span>🔥❄️ Split Temp (Coffee ≠ Water)</span>
+            </label>
           </div>
-          <input type="range" id="sliderCoffeeMl" min="20" max="110" step="5" value="40" class="styled-slider">
-          <div class="slider-ticks">
-            <span>20ml (Ristretto)</span>
-            <span>40ml</span>
-            <span>110ml (Max)</span>
+
+          <!-- Single Temp Selector -->
+          <div id="singleTempGroup" class="temp-toggle-group compact">
+            <button class="temp-btn-custom" data-temp="1">Warm ~80°C</button>
+            <button class="temp-btn-custom active" data-temp="0">Hot ~85°C</button>
+            <button class="temp-btn-custom" data-temp="2">Max ~90°C</button>
+          </div>
+
+          <!-- Split Temp Selectors (Hidden unless chkSplitTemp checked) -->
+          <div id="splitTempGroup" class="split-temp-box hidden">
+            <div class="split-temp-row">
+              <span class="split-temp-label">☕ Coffee Temp:</span>
+              <div class="temp-toggle-group compact" style="flex:1;">
+                <button class="temp-btn-coffee temp-btn-custom" data-temp="1">Warm 80°</button>
+                <button class="temp-btn-coffee temp-btn-custom" data-temp="0">Hot 85°</button>
+                <button class="temp-btn-coffee temp-btn-custom active" data-temp="2">Max 90°</button>
+              </div>
+            </div>
+            <div class="split-temp-row" style="margin-top:8px;">
+              <span class="split-temp-label">💧 Water Temp:</span>
+              <div class="temp-toggle-group compact" style="flex:1;">
+                <button class="temp-btn-water temp-btn-custom active" data-temp="1">Warm 80°</button>
+                <button class="temp-btn-water temp-btn-custom" data-temp="0">Hot 85°</button>
+                <button class="temp-btn-water temp-btn-custom" data-temp="2">Max 90°</button>
+              </div>
+            </div>
+            <small class="field-hint" style="margin-top:6px;">
+              <strong>How 2-Stage Split-Temp Works:</strong> Dispenses Stage 1 at its own temperature, waits for <code>06aa3a12</code> to return to <code>READY</code>, and immediately dispenses Stage 2 at the second temperature!
+            </small>
           </div>
         </div>
 
-        <!-- Hot Water Volume Slider -->
+        <!-- Coffee Volume Slider (ZeroOrRangeValue: 0 or 15..130 ml, step 1 ml) -->
         <div class="form-group">
           <div class="slider-header">
-            <label class="form-label">Hot Water Top-Up (ml)</label>
-            <span id="valWaterMl" class="slider-badge">80 ml</span>
+            <label class="form-label">☕ Coffee Extraction (`0` or `15–130 ml`)</label>
+            <div class="stepper-wrap">
+              <button type="button" class="btn-step" data-target="coffee" data-delta="-1">−</button>
+              <span id="valCoffeeMl" class="slider-badge">40 ml</span>
+              <button type="button" class="btn-step" data-target="coffee" data-delta="1">+</button>
+            </div>
           </div>
-          <input type="range" id="sliderWaterMl" min="0" max="250" step="10" value="80" class="styled-slider">
-          <div class="slider-ticks">
-            <span>0ml (None)</span>
-            <span>100ml</span>
-            <span>250ml (Max)</span>
+          <input type="range" id="sliderCoffeeMl" min="0" max="130" step="1" value="40" class="styled-slider">
+          <div class="quick-chips-row">
+            <button type="button" class="chip-btn" data-coffee="0">0ml</button>
+            <button type="button" class="chip-btn" data-coffee="15">15ml (Min)</button>
+            <button type="button" class="chip-btn" data-coffee="25">25ml (Ristretto)</button>
+            <button type="button" class="chip-btn" data-coffee="40">40ml (Espresso)</button>
+            <button type="button" class="chip-btn" data-coffee="110">110ml (Lungo)</button>
+            <button type="button" class="chip-btn" data-coffee="130">130ml (Max)</button>
+          </div>
+        </div>
+
+        <!-- Hot Water Volume Slider (ZeroOrRangeValue: 0 or 25..300 ml, step 1 ml) -->
+        <div class="form-group">
+          <div class="slider-header">
+            <label class="form-label">💧 Hot Water Bypass (`0` or `25–300 ml`)</label>
+            <div class="stepper-wrap">
+              <button type="button" class="btn-step" data-target="water" data-delta="-5">−</button>
+              <span id="valWaterMl" class="slider-badge">160 ml</span>
+              <button type="button" class="btn-step" data-target="water" data-delta="5">+</button>
+            </div>
+          </div>
+          <input type="range" id="sliderWaterMl" min="0" max="300" step="1" value="160" class="styled-slider">
+          <div class="quick-chips-row">
+            <button type="button" class="chip-btn" data-water="0">0ml</button>
+            <button type="button" class="chip-btn" data-water="25">25ml (Min)</button>
+            <button type="button" class="chip-btn" data-water="80">80ml</button>
+            <button type="button" class="chip-btn" data-water="125">125ml</button>
+            <button type="button" class="chip-btn" data-water="160">160ml (XL)</button>
+            <button type="button" class="chip-btn" data-water="200">200ml</button>
+            <button type="button" class="chip-btn" data-water="300">300ml (Max)</button>
           </div>
         </div>
 
@@ -193,18 +296,18 @@
         <div class="recipe-summary">
           <div class="summary-col">
             <span class="summary-label">Total Cup Volume</span>
-            <span id="valTotalMl" class="summary-value">120 ml</span>
+            <span id="valTotalMl" class="summary-value">200 ml</span>
           </div>
           <div class="summary-col">
-            <span class="summary-label">Coffee Ratio</span>
-            <span id="valRatio" class="summary-value">1 : 2.0</span>
+            <span class="summary-label">Profile & Ratio</span>
+            <span id="valRatio" class="summary-value">1 : 4.0</span>
           </div>
         </div>
 
         <!-- Action Buttons -->
         <div class="btn-stack">
           <button id="btnBrewCustom" class="btn btn-primary btn-large">
-            <span>☕</span> Start Custom Extraction
+            <span>☕</span> <span id="btnBrewCustomLabel">Start Custom Extraction</span>
           </button>
           <button id="btnSaveCustom" class="btn btn-outline">
             <span>💾</span> Save to My Library
@@ -213,7 +316,95 @@
       </div>
     </main>
 
-    <!-- TAB 3: SAVED LIBRARY -->
+    <!-- TAB 3: BLOOM & CLEANING CAPSULE LAB -->
+    <main id="tab-bloom" class="tab-pane">
+      <div class="card">
+        <h2 class="card-title">🧼 Cleaning Capsule & 🌸 Pre-Infusion Bloom</h2>
+        <p class="card-desc">
+          Run a two-phase extraction with a timed soak/bloom pause on the <strong>same capsule</strong> (`Phase 1` → `Wait Timer` → `Phase 2`).
+        </p>
+
+        <!-- Quick Mode Presets -->
+        <div class="form-group">
+          <label class="form-label">Select Modifiable Template</label>
+          <div class="quick-chips-row" style="margin-top:6px;">
+            <button type="button" id="btnPresetCleaning" class="chip-btn active-chip">🧼 Cleaning Capsule (40ml → 60s → 130ml)</button>
+            <button type="button" id="btnPresetBloomEsp" class="chip-btn">🌸 Espresso Bloom (15ml → 10s → 30ml)</button>
+            <button type="button" id="btnPresetBloomLungo" class="chip-btn">🌸 Lungo Bloom (15ml → 12s → 95ml)</button>
+          </div>
+        </div>
+
+        <!-- Phase 1 Volume -->
+        <div class="form-group">
+          <div class="slider-header">
+            <label class="form-label">Phase 1: Initial Wetting / Dissolve (`15–130 ml`)</label>
+            <span id="valBloomPhase1Ml" class="slider-badge">40 ml</span>
+          </div>
+          <input type="range" id="sliderBloomPhase1Ml" min="15" max="130" step="1" value="40" class="styled-slider">
+        </div>
+
+        <!-- Soak / Bloom Wait Duration -->
+        <div class="form-group">
+          <div class="slider-header">
+            <label class="form-label">⏱️ Soak / Bloom Pause Timer (`5–240 sec`)</label>
+            <span id="valBloomWaitSec" class="slider-badge">60 sec</span>
+          </div>
+          <input type="range" id="sliderBloomWaitSec" min="5" max="240" step="5" value="60" class="styled-slider">
+          <div class="quick-chips-row">
+            <button type="button" class="chip-btn" data-bloomwait="10">10s (Bloom)</button>
+            <button type="button" class="chip-btn" data-bloomwait="15">15s</button>
+            <button type="button" class="chip-btn" data-bloomwait="30">30s</button>
+            <button type="button" class="chip-btn" data-bloomwait="60">60s (1 min Clean)</button>
+            <button type="button" class="chip-btn" data-bloomwait="120">120s (2 min)</button>
+          </div>
+          <small class="field-hint">
+            Verified from <code>BrewOperations.LONG_BREW_TIMEOUT</code>: when paused by <code>Water Tank Empty</code>, the machine holds the capsule clamped for up to <strong>300 seconds (5 minutes)</strong> before aborting!
+          </small>
+        </div>
+
+        <!-- Phase 2 Volume -->
+        <div class="form-group">
+          <div class="slider-header">
+            <label class="form-label">Phase 2: Main Extraction / Max Flush (`15–130 ml`)</label>
+            <span id="valBloomPhase2Ml" class="slider-badge">130 ml</span>
+          </div>
+          <input type="range" id="sliderBloomPhase2Ml" min="15" max="130" step="1" value="130" class="styled-slider">
+        </div>
+
+        <!-- Temperature -->
+        <div class="form-group">
+          <label class="form-label">Temperature</label>
+          <div class="temp-toggle-group compact" style="margin-top:6px;">
+            <button class="temp-btn-bloom temp-btn-custom" data-temp="1">Warm ~80°C</button>
+            <button class="temp-btn-bloom temp-btn-custom" data-temp="0">Hot ~85°C</button>
+            <button class="temp-btn-bloom temp-btn-custom active" data-temp="2">Max ~90°C</button>
+          </div>
+        </div>
+
+        <!-- Method Explanation & Action Buttons -->
+        <div class="guide-box" style="margin-bottom:12px;">
+          <h4>Two Ways to Keep the Same Capsule on EN 350.G:</h4>
+          <ol>
+            <li><strong>In-Chamber Water-Pause Mode (Recommended — Never Drops Capsule):</strong> Starts a <code>130 ml</code> brew. When Phase 1 (or your small water fill) finishes, lift the water tank slightly (~1 cm) or let it run out. The pump stops while the chamber stays clamped! The app automatically runs your <code>60s</code> / <code>10s</code> soak timer and gives you a <strong>1-Tap BLE Resume</strong> button.</li>
+            <li><strong>2-Stage Automated Macro:</strong> Sends Phase 1 (<code>40 ml</code> / <code>15 ml</code>), counts down <code>60s</code> / <code>10s</code> (letting you re-drop the cleaning capsule & flick the slider), then automatically fires Phase 2 (<code>130 ml</code>).</li>
+          </ol>
+        </div>
+
+        <div class="btn-stack">
+          <button id="btnStartWaterPauseCycle" class="btn btn-primary btn-large">
+            <span>💧⏸️</span> Start In-Chamber Water-Pause Soak
+          </button>
+          <button id="btnStartTwoStageMacro" class="btn btn-outline">
+            <span>🔄</span> Run 2-Stage BLE Macro (Phase 1 → Wait → Phase 2)
+          </button>
+          <button id="btnSaveBloomRecipe" class="btn btn-outline">
+            <span>💾</span> Save Cycle to Library
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- TAB 4: SAVED LIBRARY -->
     <main id="tab-saved" class="tab-pane">
       <div class="library-header">
         <h2 class="card-title">Saved Recipes</h2>
@@ -224,7 +415,106 @@
       </div>
     </main>
 
-    <!-- Active Brewing Modal / Overlay -->
+    <!-- TAB 5: MACHINE & DIAL CONFIG -->
+    <main id="tab-machine" class="tab-pane">
+      <!-- Physical Rotary Dial Cup Size Programmer (Service 06aa1940: 06aa3a14 + 06aa3a24) -->
+      <div class="card">
+        <h2 class="card-title">🎛️ Physical Rotary Dial Cup Sizes</h2>
+        <p class="card-desc">Read or overwrite the hardware default volumes stored inside the machine for physical knob presses (`06aa3a14` + `06aa3a24`).</p>
+
+        <div class="form-group">
+          <label class="form-label">Select Rotary Dial Target</label>
+          <select id="selectCupTarget" class="styled-input" style="margin-top:6px;">
+            <option value="0" data-min="15" data-max="30" data-def="25">Ristretto (0x0000 • Default 25ml • Range 15–30ml)</option>
+            <option value="1" data-min="30" data-max="70" data-def="40" selected>Espresso (0x0001 • Default 40ml • Range 30–70ml)</option>
+            <option value="2" data-min="70" data-max="130" data-def="110">Lungo (0x0002 • Default 110ml • Range 70–130ml)</option>
+            <option value="3" data-min="50" data-max="300" data-def="200">Hot Water (0x0003 • Default 200ml • Range 50–300ml)</option>
+            <option value="4" data-min="15" data-max="110" data-def="25">Americano Coffee Part (0x0004 • Default 25ml • Range 15–110ml)</option>
+            <option value="5" data-min="25" data-max="300" data-def="125">Americano Water Part (0x0005 • Default 125ml • Range 25–300ml)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <div class="slider-header">
+            <label class="form-label">Programmed Dial Volume</label>
+            <span id="valCupTargetMl" class="slider-badge">40 ml</span>
+          </div>
+          <input type="range" id="inputCupVolume" min="15" max="300" step="1" value="40" class="styled-slider">
+          <small id="hintCupRange" class="field-hint">Hardware allowed range for Espresso: 30 ml – 70 ml (Factory default: 40 ml)</small>
+        </div>
+
+        <div class="btn-row">
+          <button id="btnReadCupSize" class="btn btn-outline" style="flex:1;">📖 Read from Machine</button>
+          <button id="btnWriteCupSize" class="btn btn-primary" style="flex:1; padding:12px;">💾 Save to Dial</button>
+        </div>
+      </div>
+
+      <!-- Auto-Off Standby Delay & Water Hardness (06aa3a44) -->
+      <div class="card">
+        <div class="slider-header">
+          <h2 class="card-title" style="margin-bottom:0;">⚡ Auto-Off Timer & Water Hardness</h2>
+          <button id="btnReadUserSettings" class="btn-xs">📖 Read (3a44)</button>
+        </div>
+        <p class="card-desc" style="margin-top:4px;">Configure power-save standby delay and water hardness descaling threshold (`06aa3a44`).</p>
+
+        <div class="form-group">
+          <label class="form-label">Auto-Off Standby Delay (`StandByDelayOption`)</label>
+          <div class="btn-row" style="margin-top:6px;">
+            <select id="selectStandbyDelay" class="styled-input" style="flex:1.4;">
+              <option value="540">9 Minutes (0x021C • Default)</option>
+              <option value="1800">30 Minutes (0x0708)</option>
+              <option value="7200">2 Hours (0x1C20)</option>
+              <option value="28800">8 Hours (0x7080)</option>
+            </select>
+            <button id="btnWriteStandby" class="btn btn-primary" style="flex:1; padding:10px;">Set Timer</button>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Water Hardness Level (`0` Softest – `4` Hardest)</label>
+          <div class="btn-row" style="margin-top:6px;">
+            <select id="selectWaterHardness" class="styled-input" style="flex:1.4;">
+              <option value="0">Level 0 — Very Soft (&lt; 5 °fH)</option>
+              <option value="1">Level 1 — Soft (5–13 °fH)</option>
+              <option value="2" selected>Level 2 — Medium (13–25 °fH)</option>
+              <option value="3">Level 3 — Hard (25–38 °fH)</option>
+              <option value="4">Level 4 — Very Hard (&gt; 38 °fH)</option>
+            </select>
+            <button id="btnWriteHardness" class="btn btn-primary" style="flex:1; padding:10px;">Set Hardness</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Machine Diagnostics, Capsule Stock & Factory Reset -->
+      <div class="card">
+        <h2 class="card-title">🔍 Machine Diagnostics & Maintenance</h2>
+        <div class="diag-grid">
+          <div class="diag-item">
+            <span class="chip-label">Serial (`06aa3a31`)</span>
+            <span id="valSerial" class="chip-val">--</span>
+          </div>
+          <div class="diag-item">
+            <span class="chip-label">Firmware (`06aa3a21`)</span>
+            <span id="valFirmware" class="chip-val">--</span>
+          </div>
+          <div class="diag-item">
+            <span class="chip-label">Capsule Stock (`3a15`)</span>
+            <span id="valStockCounter" class="chip-val">--</span>
+          </div>
+          <div class="diag-item">
+            <span class="chip-label">Descale Alert</span>
+            <span id="valDescaleStatus" class="chip-val">--</span>
+          </div>
+        </div>
+
+        <div class="btn-stack" style="margin-top:12px;">
+          <button id="btnOpenOnboarding" class="btn btn-outline">🔑 Open Auth Key & Pairing Setup</button>
+          <button id="btnBleFactoryReset" class="btn btn-danger" style="padding:11px;">⚠️ Send BLE Factory Reset (`03 07 00`)</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Active Brewing / Multi-Stage / Soak Modal Overlay -->
     <div id="brewModal" class="modal-backdrop hidden">
       <div class="modal-card brew-active-card">
         <div class="cup-animation-wrap">
@@ -233,7 +523,7 @@
             <span class="steam steam-2"></span>
             <span class="steam steam-3"></span>
           </div>
-          <div class="cup-graphic">☕</div>
+          <div id="brewCupGraphic" class="cup-graphic">☕</div>
         </div>
         <h3 id="brewModalTitle">Brewing Espresso</h3>
         <p id="brewModalSub">Machine is running. Please keep cup under outlet...</p>
@@ -242,8 +532,18 @@
           <div id="brewProgressBar" class="progress-fill"></div>
         </div>
 
+        <!-- Multi-Stage / Soak Timer Controls (shown during Water-Pause Soak or 2-Stage Macro) -->
+        <div id="soakControlBox" class="soak-control-box hidden">
+          <div id="soakTimerDisplay" class="soak-timer-display">01:00</div>
+          <div id="soakTimeoutHint" class="field-hint">Machine chamber clamp timeout: 300s (5:00) max</div>
+          <div class="btn-row" style="margin-top:8px; width:100%;">
+            <button id="btnTriggerSoakTimer" class="btn btn-outline" style="flex:1; padding:10px;">⏸️ Tank Lifted / Start Soak Timer</button>
+            <button id="btnResumeAfterSoak" class="btn btn-primary" style="flex:1; padding:10px;">▶️ Resume Extraction Now</button>
+          </div>
+        </div>
+
         <button id="btnStopBrew" class="btn btn-danger btn-large">
-          <span>🛑</span> Emergency Stop
+          <span>🛑</span> Emergency Stop (`03 06 01 02`)
         </button>
       </div>
     </div>
@@ -252,36 +552,34 @@
     <div id="settingsModal" class="modal-backdrop hidden">
       <div class="modal-card">
         <div class="modal-header">
-          <h3>Settings & Security Key</h3>
+          <h3>Settings & Pairing Key</h3>
           <button id="btnCloseSettings" class="close-btn">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="alert alert-warning">
-            <strong>⚠️ Hardware Pairing Limit Warning:</strong>
-            Nespresso Bluetooth chips only store ~25 pairings in internal memory. Always reuse your Auth Key rather than re-pairing repeatedly!
-          </div>
-
           <div class="form-group">
-            <label class="form-label" for="inputAuthKey">16-Character Hex Auth Key (CMID)</label>
-            <input type="text" id="inputAuthKey" class="styled-input" placeholder="e.g. 82C15F832A864437" maxlength="16">
-            <small class="field-hint">Must start with 8 or 9 (8 bytes / 16 hex characters).</small>
+            <label class="form-label" for="inputAuthKey">16-Char BLE Auth Key OR 32-Char DB `pairing_key`</label>
+            <input type="text" id="inputAuthKey" class="styled-input" placeholder="e.g. 8365d910d19e4740" maxlength="36">
+            <small class="field-hint">
+              Paste your 16-char BLE Auth Key (starts with <code>8</code>) <strong>or</strong> the 32-char <code>pairing_key</code> from <code>nespresso_app_fusion.db</code> (auto-converted via <code>PairingKey.getBufferFromByteArray</code>).
+            </small>
           </div>
 
-          <button id="btnSaveAuthKey" class="btn btn-primary" style="width: 100%;">Save Auth Key</button>
+          <div class="btn-stack">
+            <button id="btnSaveAuthKey" class="btn btn-primary" style="width: 100%; padding:12px;">💾 Save Key</button>
+            <button id="btnPairNewDevice" class="btn btn-outline" style="width: 100%;">✨ Generate & Pair New Key (Onboarding `06aa3a61`)</button>
+          </div>
 
           <hr class="divider">
 
           <div class="guide-box">
-            <h4>How to get your Auth Key:</h4>
+            <h4>How to Recover Your Original Key Without Resetting:</h4>
             <ol>
-              <li>Enable <strong>Developer Options</strong> on Android.</li>
-              <li>Turn on <strong>Enable Bluetooth HCI snoop log</strong>.</li>
-              <li>Open the official Nespresso app (or trigger a brew once).</li>
-              <li>Pull <code>btsnoop_hci.log</code> and inspect write requests to characteristic <code>06aa3a41</code>.</li>
-              <li>Copy the 16 hex characters (starts with 8) and paste above.</li>
+              <li>Run <code>adb backup -f nespresso.ab -noapk com.nespresso.activities</code> on the phone where the official Nespresso app is paired.</li>
+              <li>Run <code>python scripts/extract_auth_key.py nespresso.ab --save-env</code> to extract <code>MyMachines.pairing_key</code> from <code>nespresso_app_fusion.db</code>.</li>
+              <li>Paste the resulting 16-char key above and tap <strong>Connect</strong>!</li>
             </ol>
           </div>
-          <div class="settings-version-tag">Notpresso Expert v0.1.1 • GitHub Pages</div>
+          <div class="settings-version-tag">Notpresso Expert v0.2.0 • Offline BLE Controller</div>
         </div>
       </div>
     </div>
@@ -299,7 +597,7 @@
             <span id="logCounter" class="log-counter">0 events</span>
           </div>
           <div id="logConsole" class="log-console">
-            <div class="log-entry info">[System] Notpresso Expert v0.1.1 ready to connect to EN 350.G</div>
+            <div class="log-entry info">[System] Notpresso Expert v0.2.0 ready to connect to EN 350.G</div>
           </div>
         </div>
       </div>
@@ -309,6 +607,6 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="app.js?v=0.1.1"></script>
+  <script src="app.js?v=0.2.0"></script>
 </body>
 </html>

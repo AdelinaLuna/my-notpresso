@@ -1,8 +1,8 @@
-# Notpresso Expert (EN 350.G)
+# Notpresso Expert (EN 350.G) — v0.2.0
 
 <div align="center">
   <h3>Standalone Offline BLE Alternative for Nespresso Expert EN 350.G</h3>
-  <p><strong>Zero Cloud Accounts • Zero Phasing Out • Milliliter-Precision Custom Recipes • 100% Offline</strong></p>
+  <p><strong>Zero Cloud Accounts • Split-Temp Custom Recipes • Cleaning Capsule & Bloom Lab • Rotary Dial Programmer • 100% Offline</strong></p>
 </div>
 
 ---
@@ -11,128 +11,75 @@
 
 Nespresso officially discontinued Bluetooth onboarding and support for the **Nespresso Expert EN 350.G** in their modern Android mobile app. Furthermore, recent versions of their app force continuous cloud logins (frequently logging users out) and are actively phasing out legacy Bluetooth Original-line machines entirely.
 
-**Notpresso Expert** provides an open-source, local-first alternative designed to run directly on your smartphone (such as the **Samsung Galaxy S24 Ultra / OneUI 9**) via the **Web Bluetooth API** (Progressive Web App) or as a native Dart/Flutter service.
+**Notpresso Expert** provides an open-source, local-first alternative designed to run directly on your smartphone (such as the **Samsung Galaxy S24 Ultra / OneUI 9**) via the **Web Bluetooth API** (Progressive Web App) or as a standalone native Android APK (`android-apk` branch).
 
 ---
 
-## 2. Barista Studio vs. Expert EN 350.G (Important Architectural Difference)
+## 2. What's New in v0.2.0 (Reverse-Engineered from `nespresso-3-28-0.apk`)
 
-You cloned [`barista-studio`](https://github.com/Rosselman/barista-studio) locally into the workspace. It is essential to understand the distinction:
+Following a full bytecode reverse-engineering of `com.nestle.connecteddevices.nespresso.*` (`classes5.dex`) and `com.nespresso.connect.communication.*` (`classes4.dex`) from the last official APK that supported BLE onboarding (`v3.28.0`), `my-notpresso` now unlocks every hardware capability of the Nespresso Expert EN 350.G — plus multi-stage orchestration that the official app never exposed:
 
-| Characteristic | Barista Studio (`Rosselman/barista-studio`) | Notpresso Expert (`my-notpresso`) |
-|---|---|---|
-| **Target Machine** | Nespresso Barista Recipe Maker (Model W545) | **Nespresso Expert (Model EN 350.G)** & Prodigio |
-| **Appliance Type** | Induction Milk Frother & Recipe Maker | **High-Pressure Espresso & Hot Water Capsule Machine** |
-| **GATT Base UUID** | `6524xxxx-0253-11e7-93ae-92361f002671` | **`06aaxxxx-f22a-11e3-9daa-0002a5d5c51b`** |
-| **Core Functions** | Flashing 13 EEPROM slots for motor RPM & coil temp | **Volumetric extraction (ml coffee + ml water) & brew control** |
-| **OEM Manufacturer** | Eugster/Frismag AG (Switzerland) | Eugster/Frismag AG (Switzerland) |
-
-> **Key Takeaway**: Both appliances were manufactured by Eugster/Frismag and share the exact same low-level security architecture (CMID handshake, pairing codes, and status state machine), but the service UUIDs, command structures, and recipe execution parameters differ. `my-notpresso` implements the exact protocol for the **Expert EN 350.G**.
-
----
-
-## 3. How to Install & Run on Samsung Galaxy S24 Ultra (OneUI 9)
-
-Web Bluetooth is supported natively in **Google Chrome** and **Samsung Internet** on Android. You do not need to install complex Android SDKs, Flutter tools, or compile APKs.
-
-### Method A: Host on GitHub Pages (Recommended — Instant & Always Available)
-1. Push this `my-notpresso` directory to a GitHub repository.
-2. In repository **Settings** → **Pages**, set branch to `main` and folder to `/` (or `/my-notpresso`).
-3. Open the resulting HTTPS URL (`https://<username>.github.io/...`) in **Chrome** on your Samsung S24 Ultra.
-4. Tap the three-dot menu in Chrome → tap **"Install app"** (or **"Add to Home screen"**).
-5. The app will install onto your phone as a standalone fullscreen app with an app icon. It works 100% offline via its built-in Service Worker!
-
-### Method B: Run Locally on Your Home Wi-Fi
-1. Open a terminal in `notpresso-alternative/my-notpresso`.
-2. Run the included server:
-   ```bash
-   python server.py
-   ```
-3. The script will output your local IP (e.g. `http://192.168.1.50:8443`).
-4. On your Samsung S24 Ultra in Chrome:
-   - Navigate to `chrome://flags`
-   - Search for **Insecure origins treated as secure**
-   - Enter `http://192.168.1.50:8443`, set to **Enabled**, and tap **Relaunch**.
-   - Navigate to `http://192.168.1.50:8443` and tap **Connect**.
+1. **Ingredient Pour Sequence (`IngredientSequence`)**:
+   - **`Coffee → Water` (Classic Americano)**: Extracts espresso first, then tops up with hot water through the dedicated hot-water bypass spout.
+   - **`Water → Coffee` (Long Black)**: Dispenses hot water into the cup first, then extracts espresso on top so the golden crema stays intact.
+2. **Full Hardware Volumetric Ranges (`ZeroOrRangeValue`)**:
+   - **Coffee Volume (`0x01`)**: `0 ml` (Pure Hot Water mode) **or** `15 ml – 130 ml` (`1 ml` precision — up to Max Lungo `130 ml`).
+   - **Hot Water Volume (`0x02`)**: `0 ml` (Pure Coffee mode) **or** `25 ml – 300 ml` (`1 ml` precision).
+   - **Maximum Combined Recipe**: Up to **`430 ml`** (`130 ml` Coffee + `300 ml` Hot Water).
+3. **Split-Temperature Two-Stage Brewing ("Great Americano XL")**:
+   - The Expert's single-command `Recipe` opcode (`0x07`) applies a single temperature byte to the whole drink.
+   - When you enable **Split Temp** in the **Custom** tab (or tap the **Great Americano XL** preset), Notpresso automatically orchestrates two sequential hardware recipe brews with independent temperatures — e.g., **`40 ml` Coffee at High/Max (`89°C` / `0x02`)** followed automatically by **`160 ml` Hot Water at Low/Warm (`80°C` / `0x01`)** as soon as the machine signals `READY`.
+4. **Cleaning Capsule (`40 ml → 60s Soak → 130 ml`) & Pre-Infusion Bloom (`15 ml → 10s → 35 ml`) Lab**:
+   - Unlike older manual-lever Nespresso machines, the Expert EN 350.G has a motorized brew chamber that automatically ejects the capsule when a brew finishes.
+   - Reverse engineering `BrewOperations.monitorLongBrew()` revealed that `LONG_BREW_TIMEOUT = 300s` (5 minutes): when the water tank is empty or lifted slightly off its valve (`waterTankEmpty` bit `7` of `06aa3a12`), **the machine pauses mid-brew for up to 5 minutes while keeping the chamber clamped closed around the capsule!**
+   - The **Bloom/Clean** tab provides both:
+     - **Mode 1: In-Chamber Water-Pause Soak** (watches `06aa3a12` bit `7`, automatically starts the `60s` cleaning soak or `10s` bloom timer the instant the machine pauses, and gives you a 1-tap BLE Resume button so the remaining `130 ml` flushes through the exact same capsule).
+     - **Mode 2: Automated 2-Stage BLE Macro** (`Stage 1 Brew` → `Countdown Timer` → `Stage 2 Brew`).
+5. **Hardware Scheduled / Delayed Brew Timer**:
+   - Programs the machine's onboard RTC delay timer (`03 05 07 04 <uint32_delay_seconds> <temp> <brew_id>`) and reads back active schedules from `06aa3a32`.
+6. **Physical Rotary Dial Cup-Size Programmer & Machine Settings (`Machine` Tab)**:
+   - Reads and writes the 6 factory cup-size registers (`06aa3a14` / `06aa3a24`) so turning the physical dial on the machine brews your exact custom milliliter volumes (`Ristretto 15–30 ml`, `Espresso 30–70 ml`, `Lungo 70–130 ml`, `Hot Water 50–300 ml`, `Americano Coffee 15–110 ml`, `Americano Water 25–300 ml`).
+   - Configures **Auto-Off Standby Delay** (`9 min`, `30 min`, `2 hr`, `8 hr`) and **Water Hardness** (`Level 0–4`) via `06aa3a44`.
+   - Decodes the full 48-bit `MachineStatus` (`06aa3a12`) bitfield (`Water Tank Empty`, `Slider Open/Closed`, `Capsule Bin Full`, `Descaling Needed`, `Overheat`, `Programmed Brew Active`, and `10-bit Capsule Stock`) and `CommandResponse` (`06aa3a52`) error subcodes (`0x01..0x12`).
 
 ---
 
-## 4. Hardware Pairing Limit Warning & The Auth Key
+## 3. Recovering Your Original Auth Key Without Factory Resetting the Machine
 
-> [!CAUTION]
-> **CRITICAL HARDWARE LIMITATION:**
-> The Nordic/Dialog Bluetooth LE chip inside the Nespresso Expert machine has internal EEPROM storage for approximately **25 device pairings**. Exceeding this table can lock or brick the Bluetooth module.
-> **Never force a fresh pairing on every connection!** Save your 8-byte Auth Key once, and Notpresso will reuse it across every session without consuming pairing slots.
-
-### How to Retrieve Your Machine's 8-Byte Auth Key:
-If your phone was previously paired with the official Nespresso app:
-1. On your Android phone, enable **Developer Options** (Settings → About Phone → tap "Build number" 7 times).
-2. In Developer Options, enable **Bluetooth HCI snoop log**.
-3. Open the official Nespresso app and perform a brew or connect once.
-4. Turn off Bluetooth and transfer `/sdcard/btsnoop_hci.log` (or `btsnoop_hci.log` generated by your phone) to your PC.
-5. Open the log in **Wireshark**, filter by `btatt`, and locate the **Write Request** to UUID `06aa3a41-f22a-11e3-9daa-0002a5d5c51b`.
-6. The 8-byte hex payload (e.g., `82C15F832A864437` — 16 hex characters starting with `8` or `9`) is your machine's permanent Auth Key.
-7. Tap the **⚙️ Settings** icon in Notpresso Expert, paste your key, and tap **Save Auth Key**.
+> [!TIP]
+> **Zero-Reset Auth Key Recovery (`adb backup` + [`scripts/extract_auth_key.py`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/scripts/extract_auth_key.py)):**
+> Because Nespresso v3.28.0 sets `android:allowBackup="true"`, you can extract your machine's existing pairing key directly from the official app on a non-rooted phone in 10 seconds:
+> ```bash
+> adb backup -f nespresso.ab -noapk com.nespresso.activities
+> python scripts/extract_auth_key.py nespresso.ab --write-env .env
+> ```
+> See [`documentation/03-recovering-original-auth-key-without-reset.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/03-recovering-original-auth-key-without-reset.md) for the complete walkthrough and the exact `PairingKey.prepareHashForPairing()` nibble-shift derivation (`32-char DB hash` → `16-char 0x8... BLE Auth Key`).
 
 ---
 
-## 5. Reverse-Engineered BLE Protocol Specification
+## 4. Technical Documentation (`documentation/`)
 
-All custom vendor services share the base 128-bit UUID:
-`06aaXXXX-f22a-11e3-9daa-0002a5d5c51b`
+All reverse-engineered protocol details, Dalvik bytecode offsets, and hardware state machines are documented in [`documentation/`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/README.md):
 
-### 5.1 Primary Services & Characteristics
-| UUID | Handle | Name | Description |
-|---|---|---|---|
-| `06aa1910` | Service | Device Info & Auth | Pairing handshake and authentication |
-| `06aa3a41` | Char (Write) | `CHAR_AUTH` | 8-byte CMID / AuthKey write |
-| `06aa3a51` | Char (Read) | `CHAR_AUTH_TYPE` | Pairing verification (`0x02` = Final / Authenticated) |
-| `06aa3a61` | Char (Write) | `CHAR_TX_LEVEL` | Write `[0x01]` to request pairing signal |
-| `06aa1920` | Service | Status & Control | Operational control, telemetries, and commands |
-| `06aa3a12` | Char (Notify/Read) | `CHAR_MACHINE_STATUS` | Byte 0: Pairing code, Byte 1: Machine state |
-| `06aa3a42` | Char (Write) | `CHAR_COMMAND` | Main command dispatcher (Brews, Recipes, Stop) |
-| `06aa3a15` | Char (Notify/Read) | `CHAR_CAPSULES` | Remaining capsule counter |
+- **[`documentation/README.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/README.md)** — Master overview & architecture summary.
+- **[`documentation/01-ble-gatt-protocol-reference.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/01-ble-gatt-protocol-reference.md)** — Complete GATT UUID table, 48-bit `MachineStatus` (`06aa3a12`) bitfield, `CommandResponse` (`06aa3a52`) error subcodes, and command frames.
+- **[`documentation/02-pairing-and-authentication-internals.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/02-pairing-and-authentication-internals.md)** — Why Web Bluetooth pairing fails (`TxPowerLevel` OS bond trigger + `PairingKey` bit-shift algorithm) and how native Android solves it.
+- **[`documentation/03-recovering-original-auth-key-without-reset.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/03-recovering-original-auth-key-without-reset.md)** — Step-by-step guide to extracting your existing pairing key from `nespresso.ab` or HCI snoop logs.
+- **[`documentation/04-custom-recipes-volumes-and-multi-stage-brewing.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/04-custom-recipes-volumes-and-multi-stage-brewing.md)** — Volumetric limits, ingredient ordering, split-temperature Americano orchestration, and cleaning capsule / bloom soaking.
+- **[`documentation/05-sdk-class-hierarchy-and-machine-families.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/05-sdk-class-hierarchy-and-machine-families.md)** — Complete class map of `com.nestle.connecteddevices.nespresso.*` across Expert (`D80`/`C80`), Prodigio, and Aguila/Venus.
 
-### 5.2 Command Byte Payloads (Sent to `06aa3a42`)
+---
 
-#### A. Standard Preset Brew
-10-byte packet:
-```text
-03 05 07 04 00 00 00 00 [TEMP] [SIZE]
-```
-- **Temperature `[TEMP]`**:
-  - `0x00`: Medium / Warm (~83°C)
-  - `0x01`: Hot (~86°C)
-  - `0x02`: Extra Hot (~89°C)
-- **Cup Size `[SIZE]`**:
-  - `0x00`: Ristretto (25 ml)
-  - `0x01`: Espresso (40 ml)
-  - `0x02`: Lungo (110 ml)
-  - `0x04`: Hot Water (200 ml)
-  - `0x05`: Americano (25 ml coffee + 125 ml hot water)
+## 5. How to Install & Run on Samsung Galaxy S24 Ultra (OneUI 9)
 
-#### B. Custom Volumetric Recipe Brew (The Official App Replacement!)
-Custom recipes require a 2-packet sequence:
-- **Packet 1: Recipe Formulation Definition** (11 bytes):
-  ```text
-  01 10 08 00 00 01 [COFFEE_HI] [COFFEE_LO] 02 [WATER_HI] [WATER_LO]
-  ```
-  - `01 10 08 00 00`: Custom volumetric formulation header
-  - `01`: Component 1 (Coffee)
-  - `[COFFEE_HI] [COFFEE_LO]`: 16-bit big-endian volume in milliliters (e.g. 50ml = `0x00, 0x32`)
-  - `02`: Component 2 (Hot water top-up)
-  - `[WATER_HI] [WATER_LO]`: 16-bit big-endian volume in milliliters (e.g. 80ml = `0x00, 0x50`)
-- **Packet 2: Recipe Execution Trigger** (10 bytes):
-  ```text
-  03 05 07 04 00 00 00 00 [TEMP] 07
-  ```
-  Where `0x07` specifies **Custom Recipe Mode**.
+### Method A: Hosted on GitHub Pages (Instant PWA)
+1. Open your GitHub Pages HTTPS URL (`https://<username>.github.io/notpresso-alternative/`) in **Chrome** on your Samsung S24 Ultra.
+2. Tap the **⚙️ Settings** icon, paste your 16-char Auth Key (or 32-char DB hash), and tap **Save Auth Key**.
+3. Tap **Connect**, select your Nespresso Expert, and brew!
+4. Optional: Tap Chrome's three-dot menu → **"Install app"** to add Notpresso Expert to your home screen for 100% offline use.
 
-#### C. Emergency Stop / Cancel
-```text
-01 00
-```
-Instantly cuts pump power and heater coils.
+### Method B: Sideload the Native Android APK (`android-apk` branch)
+If you want native Android BLE bonding (`createBond()`), background service resilience, and zero browser prompts, check out the `android-apk` branch and install `notpresso-expert-debug.apk`.
 
 ---
 
@@ -140,16 +87,16 @@ Instantly cuts pump power and heater coils.
 
 ```text
 my-notpresso/
-├── index.html                # Mobile-first Web Bluetooth PWA interface
-├── styles.css                # Dark theme tailored for Samsung S24 Ultra & OneUI
-├── app.js                    # Web Bluetooth GATT transactor & recipe engine
+├── index.html                # v0.2.0 Mobile-first Web Bluetooth PWA interface (5 tabs)
+├── styles.css                # Dark Espresso & Crema Gold theme for Samsung S24 Ultra
+├── app.js                    # v0.2.0 BLE GATT engine, Split-Temp & Bloom/Clean orchestrator
 ├── manifest.json             # PWA configuration for Add-to-Homescreen
-├── sw.js                     # Offline caching Service Worker
+├── sw.js                     # Offline caching Service Worker (v0.2.0)
 ├── server.py                 # Optional local Python server with Wi-Fi IP display
-├── README.md                 # Complete documentation & protocol reverse engineering
-└── flutter_src/              # Native Dart / Flutter source files (for APK compilation)
-    ├── expert_ble_constants.dart
-    └── expert_ble_service.dart
+├── scripts/
+│   └── extract_auth_key.py   # Extracts 16-char BLE Auth Key from nespresso.ab / SQLite DB
+├── documentation/            # Complete reverse-engineered BLE protocol & SDK reference
+└── flutter_src/              # Reference Dart / Flutter BLE service implementation
 ```
 
 ---
@@ -176,4 +123,3 @@ This project stands on the shoulders of several excellent open-source projects a
 ## 8. License
 
 Distributed under the MIT License. See `LICENSE` for details.
-
