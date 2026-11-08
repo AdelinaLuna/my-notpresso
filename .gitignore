@@ -1,16 +1,26 @@
-# System files
+# Local secrets & extracted Nespresso machine keys (NEVER commit)
+.env
+.env.*
+*.key
+*.ab
+*.tar
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+btsnoop_hci.log
+dumpstate-*.txt
+bugreport-*.zip
+
+# Android & Gradle build outputs (for android-apk branch)
+android/
+.gradle/
+**/build/
+local.properties
+
+# OS / Editor files
 .DS_Store
 Thumbs.db
-
-# SSL private keys/certificates if generated locally
-*.pem
-*.key
-*.crt
-
-# Python cache
-__pycache__/
-*.py[cod]
-
-# Local editor
-.vscode/
 .idea/
+.vscode/
+*.iml
