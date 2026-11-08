@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - android-apk
+    paths-ignore:
+      - 'documentation/**'
+      - 'README.md'
   workflow_dispatch:
 
 permissions:
@@ -99,8 +102,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add releases/notpresso-expert-en350g.apk android/app/src/main/assets/
+          git add releases/notpresso-expert-en350g.apk
           if ! git diff --staged --quiet; then
             git commit -m "chore(apk): build signed standalone notpresso-expert-en350g.apk [skip ci]"
             git push origin HEAD:android-apk
           fi
+

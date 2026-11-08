@@ -2,6 +2,12 @@
 .DS_Store
 Thumbs.db
 
+# Local environment & private machine credentials (excluded from git)
+.env
+.env.*
+*.ab
+*.db
+
 # SSL private keys/certificates if generated locally
 *.pem
 *.key
@@ -14,3 +20,17 @@ __pycache__/
 # Local editor
 .vscode/
 .idea/
+*.iml
+
+# Android / Gradle build artifacts & generated assets
+.gradle/
+**/build/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+local.properties
+android/app/src/main/assets/
+*.keystore
+*.jks
+
