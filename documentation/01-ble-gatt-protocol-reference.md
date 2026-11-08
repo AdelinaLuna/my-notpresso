@@ -1,176 +1,222 @@
-# 01 — BLE GATT Protocol Reference (Nespresso Expert EN 350.G)
+# 01 — BLE GATT Protocol Reference (Nespresso Expert EN 350.G / D80)
 
-Extracted from `com.nespresso.ble.expert.*` and `com.nespresso.ble.base.*` in `nespresso-3-28-0.apk`.
-
----
-
-## 1. BLE GATT Services & Characteristics
-
-The Nespresso Expert exposes four primary vendor GATT services under the base UUID `06aaXXXX-f22a-11e3-9daa-0002a5d5c51b`:
-
-### Service 1: Authentication & Onboarding (`06aa1910-f22a-11e3-9daa-0002a5d5c51b`)
-
-| Characteristic UUID | Official APK Name | Props | Length | Description |
-|---|---|---|---|---|
-| `06aa3a41-f22a-11e3-9daa-0002a5d5c51b` | `CharacWriteAuth` | Write | 8 bytes | Session Authentication / Pairing Key (`0x8X...`). Must be written at the start of every BLE connection (and during initial onboarding). |
-| `06aa3a51-f22a-11e3-9daa-0002a5d5c51b` | `CharacReadPairingKeyState` | Read | 1 byte | Returns whether the machine already holds a pairing key (`0` or `1` = `ABSENT`, `2` = `PRESENT`). |
-| `06aa3a61-f22a-11e3-9daa-0002a5d5c51b` | `CharacWriteTXPowerLevel` | Write | 1 byte | Onboarding mode toggle: `[0x01]` lowers TX power and opens the key-enrollment window; `[0x00]` restores normal TX power and commits onboarding. |
-
-### Service 2: Machine Control & Telemetry (`06aa1920-f22a-11e3-9daa-0002a5d5c51b`)
-
-| Characteristic UUID | Official APK Name | Props | Length | Description |
-|---|---|---|---|---|
-| `06aa3a12-f22a-11e3-9daa-0002a5d5c51b` | `MachineStatus` | Read, Notify | 8 bytes | Real-time machine state, error flags, descaling counter, and slider status. |
-| `06aa3a22-f22a-11e3-9daa-0002a5d5c51b` | `SliderState` | Read, Notify | 1 byte | Capsule slider position (`0x00` = Open, `0x02` = Closed). |
-| `06aa3a32-f22a-11e3-9daa-0002a5d5c51b` | `CapsuleCounter` | Read, Write | 2 bytes | Remaining capsule count in the app's virtual dispenser counter (unsigned 16-bit big-endian, max `1000`). |
-| `06aa3a42-f22a-11e3-9daa-0002a5d5c51b` | `CommandKey` | Write | 6–10 bytes | Command input endpoint for brewing, aborting, cup programming, and factory reset. |
-| `06aa3a52-f22a-11e3-9daa-0002a5d5c51b` | `CommandResponse` | Read, Notify | 3–4 bytes | Asynchronous response/ACK/NACK for the last command written to `06aa3a42`. |
-| `06aa3a62-f22a-11e3-9daa-0002a5d5c51b` | `WaterHardness` | Read, Write | 3 bytes | Water hardness level (`Byte 2` = `0x00`..`0x04`, where `0` is softest and `4` is hardest). |
-
-### Service 3: Machine Serial & Diagnostics (`06aa1930-f22a-11e3-9daa-0002a5d5c51b`)
-
-| Characteristic UUID | Official APK Name | Props | Description |
-|---|---|---|---|
-| `06aa3a13-f22a-11e3-9daa-0002a5d5c51b` | `SerialNumber` | Read | 19-character ASCII serial number of the machine. |
-| `06aa3a23` .. `06aa3a73` | `FaultLog` / `Lifecounter` | Read | Internal diagnostic counters and error history registers. |
+This document specifies the complete Bluetooth Low Energy (BLE) Generic Attribute Profile (GATT) services, characteristics, telemetry bitfields, response codes, and command payloads supported by the **Nespresso Expert (EN 350.G / D80 & C80)** hardware.
 
 ---
 
-## 2. Telemetry Byte Formats
+## 1. 128-Bit UUID Template & Offset Formula
 
-### 2.1 `MachineStatus` (`06aa3a12-f22a-11e3-9daa-0002a5d5c51b`) — 8 Bytes
+All custom vendor services and characteristics on the Nespresso Expert share a single 128-bit base UUID template:
 
-Decoded by `com.nespresso.ble.expert.builders.MachineStateBuilder`:
+$$\texttt{Base UUID} = \texttt{06aa1910-f22a-11e3-9daa-0002a5d5c51b}$$
 
-| Byte | Bit / Value | Meaning |
-|---|---|---|
-| **Byte 0** | Status Flags | Bitfield of active warnings/conditions:<br>• `0x01`: Water Tank Empty (`WATER_ENGAGED`)<br>• `0x02`: Descaling Needed (`DESCALING_NEEDED`)<br>• `0x04`: Capsule Mechanism Jammed (`CAPSULE_MECHANISM_JAMMED`)<br>• `0x08`: Tray Full / Capsule Container Full (`TRAY_FULL_COUNTER`)<br>• `0x20`: Machine Hot / Overheated (`OVERHEATED`)<br>• `0x40`: Sleeping (`SLEEPING`) |
-| **Byte 1** | State Enum | Primary operational state:<br>• `0x00`: `SLEEPING` / Deep Standby<br>• `0x01`: `PREHEATING`<br>• `0x02`: `READY` (Ready to brew)<br>• `0x03`: `BREWING`<br>• `0x04`: `ERROR`<br>• `0x06`: `DESCALING`<br>• `0x09`: `RINSING` |
-| **Byte 2** | Hardware Flags | Bit `0x40`: `NEED_DESCALE` urgent flag. |
-| **Byte 3** | Error Code | Non-zero hardware fault code when `Byte 1 == 0x04`. |
-| **Bytes 4–5** | Timer (uint16 BE) | Remaining time in seconds for scheduled/delayed brew or descaling. |
-| **Byte 6** | Slider Position | Capsule slider state (`0x00` = Slider Open, `0x02` = Slider Closed). |
-| **Byte 7** | Descale Counter | Remaining brews before descaling alert triggers. |
+Every service and characteristic UUID is derived by replacing the 16-bit big-endian integer at bits `32..47` (`0x1910` in the base UUID) with a 16-bit offset value:
 
-### 2.2 `SliderState` (`06aa3a22-f22a-11e3-9daa-0002a5d5c51b`) — 1 Byte
-
-Decoded by `com.nespresso.ble.expert.builders.SliderStateBuilder`:
-- `0x00`: **Slider Open** (`OPEN`) — user can insert a capsule; brewing commands will be rejected with `LID_STILL_OPEN` (`0x2103`).
-- `0x02`: **Slider Closed** (`CLOSED`) — ready to brew (provided a fresh capsule was loaded).
+$$\texttt{06aa}\langle\texttt{OFFSET\_HEX}\rangle\texttt{-f22a-11e3-9daa-0002a5d5c51b}$$
 
 ---
 
-## 3. Command Payloads (`06aa3a42-f22a-11e3-9daa-0002a5d5c51b`)
+## 2. Complete GATT Services & Characteristics Map
 
-All commands are written to `06aa3a42` (`CommandKey`) after authenticating on `06aa3a41`.
+### Service 1: Authentication, Device Info & Onboarding (`06aa1910-f22a-11e3-9daa-0002a5d5c51b`, offset `0x1910`)
 
-### 3.1 Standard Single-Rotary Brew (10 Bytes)
+| Characteristic UUID | Offset (`Dec` / `Hex`) | Role | Props | Size | Description |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `06aa3a21-f22a-11e3-9daa-0002a5d5c51b` | `14881` (`0x3A21`) | `MachineInfo` | Read | 10 bytes | Hardware revision (`bytes[0..1]`), Main Microcontroller Firmware version (`bytes[4..5]`), and BLE Module Firmware version (`bytes[6..7]`). |
+| `06aa3a31-f22a-11e3-9daa-0002a5d5c51b` | `14897` (`0x3A31`) | `SerialNumber` | Read | 19 bytes | 19-character ASCII machine serial number (e.g. `00000D80XXXXXXXXXXn`). |
+| `06aa3a41-f22a-11e3-9daa-0002a5d5c51b` | `14913` (`0x3A41`) | `AuthKey` | Write | 8 bytes | Session Authentication / Pairing Key (`[0x8X, ...]`). Must be written at the start of every GATT session to unlock Services 2–5. |
+| `06aa3a51-f22a-11e3-9daa-0002a5d5c51b` | `14929` (`0x3A51`) | `PairingKeyState` | Read | 1 byte | Enrollment state: `0x00` or `0x01` = `ABSENT` (unpaired / factory-reset), `0x02` = `PRESENT` (key enrolled). |
+| `06aa3a61-f22a-11e3-9daa-0002a5d5c51b` | `14945` (`0x3A61`) | `TxPowerLevel` | Write | 1 byte | Onboarding radio power control: `[0x01]` = Low TX power (enter key-enrollment window), `[0x00]` = Default TX power (commit and exit enrollment). |
 
-Built by `com.nespresso.ble.expert.operations.brew.BrewByteConversion`:
+### Service 2: Brewing, Commands & Live Machine Monitoring (`06aa1920-f22a-11e3-9daa-0002a5d5c51b`, offset `0x1920`)
 
-```text
-03 05 07 04 00 00 00 00 <TEMP_BYTE> <RECIPE_BYTE>
-```
+| Characteristic UUID | Offset (`Dec` / `Hex`) | Role | Props | Size | Description |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `06aa3a12-f22a-11e3-9daa-0002a5d5c51b` | `14866` (`0x3A12`) | `MachineStatus` | Read, Notify | 6–8 bytes | 48-bit real-time machine status bitfield (see Section 3.1). |
+| `06aa3a22-f22a-11e3-9daa-0002a5d5c51b` | `14882` (`0x3A22`) | `AdditionalData` / `SliderState` | Read, Notify | 1–14 bytes | Capsule slider state (`0x00` = Open, `0x02` = Closed) and auxiliary event telemetry. |
+| `06aa3a32-f22a-11e3-9daa-0002a5d5c51b` | `14898` (`0x3A32`) | `CommandSchedule` | Read | 6 bytes | Active Scheduled/Delayed Brew status: `bytes[0..3]` (`uint32 BE`) remaining delay in seconds, `byte[4]` temperature code, `byte[5]` drink/schedule ID. |
+| `06aa3a42-f22a-11e3-9daa-0002a5d5c51b` | `14914` (`0x3A42`) | `CommandKey` | Write | 3–11 bytes | Primary command endpoint: load custom recipe (`11B`), trigger/schedule brew (`10B`), abort active brew (`4B`), or factory reset (`3B`). |
+| `06aa3a52-f22a-11e3-9daa-0002a5d5c51b` | `14930` (`0x3A52`) | `CommandResponse` | Read, Notify | 4–20 bytes | Command execution result (`ACK` `0x20`, `CONDITIONS_NOT_FULFILLED` `0x24`, `OUT_OF_RANGE` `0x36`; see Section 3.2). |
 
-- **Header (`Bytes 0..7`)**: `03 05 07 04 00 00 00 00`
-- **Byte 8 (`<TEMP_BYTE>`)** — `TemperatureConversion`:
-  - `0x01` = **Warm / Medium** (`LOW` in APK enum)
-  - `0x02` = **Hot / High** (`MEDIUM` in APK enum)
-  - `0x03` = **Extra Hot / Very High** (`HIGH` in APK enum)
-- **Byte 9 (`<RECIPE_BYTE>`)** — Rotary dial position (`BrewingType`):
-  - `0x01` = **Ristretto**
-  - `0x02` = **Espresso**
-  - `0x04` = **Lungo**
-  - `0x05` = **Hot Water**
-  - `0x07` = **Americano**
+### Service 3: Error Log Retrieval (`06aa1930-f22a-11e3-9daa-0002a5d5c51b`, offset `0x1930`)
 
-### 3.2 Custom Two-Step Volume Recipe Brew (10 Bytes)
+| Characteristic UUID | Offset (`Dec` / `Hex`) | Role | Props | Size | Description |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `06aa3a13-f22a-11e3-9daa-0002a5d5c51b` | `14867` (`0x3A13`) | `ErrorSelection` | Write | 1 byte | Write `[0x00]` to select the most recent hardware fault record (`0x00..0x09` index history). |
+| `06aa3a23-f22a-11e3-9daa-0002a5d5c51b` | `14883` (`0x3A23`) | `ErrorInformation` | Read | 19+ bytes | Fault record: `byte[0]` = `errorNumber`, `byte[1] >> 4` = `errorCategory` (`0=NONE, 1=INFO, 2=WARNING, 3=ERROR, 4=FATAL`), `byte[2]` = `errorSubCode`. |
 
-Built by `BrewByteConversion.fromCustomRecipe(CustomRecipe)` — allows exact milliliter control for coffee and hot water independently (between `15 ml` and `300 ml` total):
+### Service 4: Rotary Dial Cup Sizes, Standby Delay & Water Hardness (`06aa1940-f22a-11e3-9daa-0002a5d5c51b`, offset `0x1940`)
 
-```text
-01 10 08 00 <ING0_TYPE> <ING0_ML_HI> <ING0_ML_LO> <ING1_TYPE> <ING1_ML_HI> <ING1_ML_LO>
-```
+| Characteristic UUID | Offset (`Dec` / `Hex`) | Role | Props | Size | Description |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `06aa3a14-f22a-11e3-9daa-0002a5d5c51b` | `14868` (`0x3A14`) | `CupSizeTarget` | Write | 2 bytes | Selects which Rotary Dial cup slot (`0x0000`..`0x0005`) to read or write on `06aa3a24`. |
+| `06aa3a24-f22a-11e3-9daa-0002a5d5c51b` | `14884` (`0x3A24`) | `CupSizeVolume` | Read, Write | 2–4 bytes | Reads `2B` (`[volHi, volLo]`) or writes `4B` (`[volHi, volLo, 0xFF, 0xFF]`) in milliliters for the slot selected on `06aa3a14`. |
+| `06aa3a44-f22a-11e3-9daa-0002a5d5c51b` | `14916` (`0x3A44`) | `GeneralUserConfig` | Read, Write | 3–4 bytes | `[standbySecHi, standbySecLo, waterHardnessLevel]` (`0xFF` = leave field unchanged). |
 
-- **Header (`Bytes 0..3`)**: `01 10 08 00`
-- **Step 1 (`Bytes 4..6`)**:
-  - `Byte 4`: Ingredient type (`0x01` = Coffee extraction, `0x02` = Hot water bypass)
-  - `Bytes 5..6`: Volume in milliliters as 16-bit unsigned big-endian integer (e.g., `25 ml` = `00 19`, `40 ml` = `00 28`, `110 ml` = `00 6e`).
-- **Step 2 (`Bytes 7..9`)**:
-  - Single-step recipe (Coffee only or Water only): `07 00 00` (`Ingredient.NONE = 0x07`, volume `0`).
-  - Two-step recipe (e.g., custom Americano): `02 <WATER_ML_HI> <WATER_ML_LO>` (e.g., `125 ml` water = `02 00 7d`).
+### Service 5: Capsule Stock Counter (`06aa1950-f22a-11e3-9daa-0002a5d5c51b`, offset `0x1950`)
 
-### 3.3 Stop / Abort Active Brew (6 Bytes)
-
-Found in `com.nespresso.ble.base.adapters.BaseBrewAdapter.ABORT_ACTION_PAYLOAD`:
-
-```text
-03 06 01 02 00 00
-```
-
-Writing these 6 bytes to `06aa3a42` while the machine is brewing (`MachineStatus Byte 1 == 0x03`) immediately stops the pump.
-
-### 3.4 Program Hardware Default Volume for a Rotary Position (9 Bytes)
-
-Found in `com.nespresso.ble.expert.adapters.CupSizeOperationsAdapter`:
-
-```text
-03 05 07 03 00 00 <ML_HI> <ML_LO> <CUP_BIT>
-```
-
-- `Bytes 6..7`: Target default volume in milliliters (`uint16 BE`).
-- `Byte 8 (`<CUP_BIT>`)`:
-  - `0x01` = Ristretto (`15–40 ml`)
-  - `0x02` = Espresso (`30–70 ml`)
-  - `0x04` = Lungo (`70–130 ml`)
-  - `0x08` = Hot Water (`50–300 ml`)
-  - *(Note: Americano is programmed via a custom two-step command).*
-
-### 3.5 Reset All Cup Sizes to Factory Default (6 Bytes)
-
-Found in `CupSizeOperationsAdapter.resetCupSizes()`:
-
-```text
-03 06 05 02 00 00
-```
-
-### 3.6 Factory Reset Machine (6 Bytes — **Clears Pairing Key!**)
-
-Found in `com.nespresso.ble.expert.adapters.FactoryResetAdapter`:
-
-```text
-03 06 03 02 00 00
-```
-
-> **Warning**: Writing `03 06 03 02 00 00` to `06aa3a42` erases the machine's stored BLE `pairingKey` (`06aa3a51` reverts from `0x02` to `0x00`/`0x01`) and resets all custom cup volumes.
+| Characteristic UUID | Offset (`Dec` / `Hex`) | Role | Props | Size | Description |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `06aa3a15-f22a-11e3-9daa-0002a5d5c51b` | `14869` (`0x3A15`) | `StockCount` | Read, Write | 2 bytes | Remaining capsule stock counter (`uint16 BE`, or `0xFFFF` = stock tracking deactivated). |
+| `06aa3a25-f22a-11e3-9daa-0002a5d5c51b` | `14885` (`0x3A25`) | `StockThreshold` | Read, Write | 2 bytes | Low-capsule warning threshold (`uint16 BE`). |
+| `06aa3a35-f22a-11e3-9daa-0002a5d5c51b` | `14901` (`0x3A35`) | `StockKey` | Read, Write | 4 bytes | 32-bit stock synchronization transaction identifier. |
 
 ---
 
-## 4. `CommandResponse` (`06aa3a52-f22a-11e3-9daa-0002a5d5c51b`) Decoding
+## 3. Exact Telemetry & Response Byte Layouts
 
-Decoded by `com.nespresso.ble.expert.builders.CommandResponseBuilder`:
+### 3.1 `MachineStatus` (`06aa3a12`) — 48-Bit Bitfield Specification
 
-- **Byte 0** indicates whether the command succeeded or failed:
-  - **Success**: `(Byte 0 & 0x60) == 0x20` (typically `0x20` or `0x23`, e.g., `23 05 07` or `21 10 08`).
-  - **Failure / NACK**: `(Byte 0 & 0x60) == 0x40` (typically `0x40` or `0x43`).
-- When **Failure** occurs, **Bytes 2–3** contain a 16-bit error code:
+The 6-byte (`48-bit`) status frame uses big-endian bit numbering where **Bit `0` is the Most Significant Bit (`0x80`) of `Byte 0`**, and **Bit `7` is the Least Significant Bit (`0x01`) of `Byte 0`**:
 
-| Bytes 2–3 (Hex) | Official APK Error Constant | Meaning / User Fix |
-|---|---|---|
-| `0x2101` | `TRAY_FULL` | Drip tray / capsule container is full. Empty it. |
-| `0x2102` | `WATER_EMPTY` | Water tank is empty. Refill tank. |
-| `0x2103` | `LID_STILL_OPEN` | Capsule slider is open. Close the slider. |
-| `0x2104` | `CAPSULE_NOT_CHANGED` | Slider was not opened/closed since last brew. Insert a fresh capsule. |
-| `0x2105` | `SECURITY_ERROR` | Machine safety interlock triggered. |
-| `0x2107` | `WRONG_SETTING_SELECTION` | Physical rotary dial on the machine is still on `OFF` (`0`) or incompatible with command. |
-| `0x2403` | `CLEAN_NEEDED` | Machine requires rinsing/cleaning cycle. |
+```text
+Bit Index (b = 0..47):
+  byteIndex = b >> 3
+  bitMask   = 1 << (7 - (b & 7))
+```
+
+| Byte | Bit Range (`MSB=0`) | Bitwise Expression | Field Name | Meaning |
+| :---: | :---: | :--- | :--- | :--- |
+| **Byte 0** | `Bit 0` | `(b[0] & 0x80) != 0` | `bootloaderActive` | `1` = Bootloader / firmware update mode active |
+| **Byte 0** | `Bits 1..2` | `(b[0] >> 5) & 0x03` | `pairingKeyState` | `0` or `1` = `ABSENT`, `2` = `PRESENT` |
+| **Byte 0** | `Bit 3` | `(b[0] & 0x10) != 0` | `errorPresent` | `1` = Hardware error present (inspect via `06aa1930`) |
+| **Byte 0** | `Bit 5` | `(b[0] & 0x04) != 0` | `descalingNeeded` | `1` = Descaling cycle required |
+| **Byte 0** | `Bit 7` | `(b[0] & 0x01) != 0` | `waterTankEmpty` | `1` = **Water Tank Empty** (also triggers immediately if the water tank is lifted mid-brew) |
+| **Byte 1** | `Bit 9` | `(b[1] & 0x40) != 0` | `capsuleContainerFull` | `1` = **Spent Capsule Container Full** |
+| **Byte 1** | `Bits 12..15` | `b[1] & 0x0F` | `machineState` | 4-bit operational state (`0..15`, see table below) |
+| **Byte 2** | `Bit 16` | `(b[2] & 0x80) != 0` | `capsuleStockLow` | `1` = Remaining capsule count is below `06aa3a25` threshold |
+| **Bytes 2–3** | `Bits 17..26` | `((b[2] & 0x7F) << 3) \| (b[3] >> 5)` | `capsuleStockCounter` | 10-bit remaining capsule counter (`0..1023`) |
+| **Byte 3** | `Bit 27` | `(b[3] & 0x10) != 0` | `programmedBrewActive` | `1` = **Hardware Scheduled / Delayed Brew timer is active** |
+| **Byte 3** | `Bits 28..29` | `(b[3] >> 2) & 0x03` | `programmedBrewEventCtr` | 2-bit rolling counter incremented when scheduled brew changes |
+| **Byte 3** | `Bits 30..31` | `b[3] & 0x03` | `capsuleStockEventCtr` | 2-bit rolling counter incremented when capsule stock changes |
+| **Byte 4** | `Bits 32..33` | `(b[4] >> 6) & 0x03` | `blockedMachineEventCtr` | 2-bit rolling counter incremented on blocked machine events |
+| **Byte 5** | `Bit 46` | `(b[5] & 0x02) == 0` | `sliderOpen` | **Inverted logic**: `bit == 0` → **Slider OPEN**, `bit == 1` → **Slider CLOSED** |
+| **Byte 5** | `Bit 47` | `(b[5] & 0x01) != 0` | `obstacleDetected` | `1` = Physical obstacle / jam detected in slider or brew chamber |
+
+#### `MachineState` Values (`Byte 1 & 0x0F`):
+| Value | Hex | State Name | Description |
+| :---: | :---: | :--- | :--- |
+| `0` | `0x00` | `RESET` | Machine resetting / initializing |
+| `1` | `0x01` | `HEAT_UP` | Heating thermoblock |
+| `2` | `0x02` | `READY` | Ready to brew |
+| `3` | `0x03` | `DESCALING_READY` | Ready to start descaling cycle |
+| `4` | `0x04` | `BREWING` | Actively brewing / pumping water |
+| `5` | `0x05` | `ADVANCED_SELECTION_MENU` | Physical rotary dial is in advanced menu position |
+| `6` | `0x06` | `DESCALING` | Descaling cycle in progress |
+| `7` | `0x07` | `STEAM_OUT` | Purging / steaming out internal water circuit |
+| `8` | `0x08` | `ERROR` | Fault / error lockout state |
+| `9` | `0x09` | `POWER_SAVE` | Sleeping / Standby power-save mode |
+| `10` | `0x0A` | `OVER_HEAT` | Overheated cooldown protection |
+| `11` | `0x0B` | `DIAGNOSTIC_MODE` | Factory diagnostic mode |
+| `12` | `0x0C` | `BLE_SETTINGS` | Bluetooth configuration mode |
+| `13` | `0x0D` | `FACTORY_RESET` | Performing factory reset |
+| `14` | `0x0E` | `WATER_HARDNESS_SETTINGS` | Water hardness configuration mode |
+| `15` | `0x0F` | `STAND_BY_DELAY_SETTINGS` | Auto-off standby delay configuration mode |
 
 ---
 
-## 5. How These Findings Can Improve the `main` (Web Bluetooth) Branch
+### 3.2 `CommandResponse` (`06aa3a52`) — ACK & Rejection Subcodes
 
-Even when using Web Bluetooth in Chrome on the `main` branch, the protocol findings above allow several high-value upgrades:
-1. **Emergency Stop / Abort Brew Button**: Sending `03 06 01 02 00 00` to `06aa3a42` stops an active brew immediately.
-2. **Real-Time Command Error Explanations**: Subscribing to `06aa3a52` (`CommandResponse`) notifications tells the user *why* a brew didn't start (e.g., `0x2104` *"Please open and close the slider to load a new capsule"* or `0x2103` *"Capsule slider is open"*).
-3. **Live Capsule Slider Indicator**: Reading `Byte 6` of `06aa3a12` (or subscribing to `06aa3a22`) shows whether the capsule slider is open (`0x00`) or closed (`0x02`).
-4. **Hardware Cup Volume Programming**: Sending `03 05 07 03 00 00 <HI> <LO> <CUP>` programs the physical machine's default volumes for Ristretto, Espresso, Lungo, and Hot Water so even physical button presses use the user's preferred milliliters.
+After writing a command to `06aa3a42`, the machine notifies `06aa3a52` (up to 20 bytes, where the response payload begins at `bytes[3]`):
+- **`bytes[3] == 0x20` (`32`)**: **`ACK` (`DONE`)** — Command accepted and executing.
+- **`bytes[3] == 0x36` (`54`)**: **`OUT_OF_RANGE`** — Requested volume or parameter is outside hardware limits.
+- **`bytes[3] == 0x24` (`36`)**: **`CONDITIONS_NOT_FULFILLED`** — Command rejected; inspect **`bytes[4]`** for the exact precondition failure:
+
+| `bytes[4]` (`Dec` / `Hex`) | Rejection Code | Human-Readable Cause |
+| :---: | :--- | :--- |
+| `1` (`0x01`) | `INVALID_STATE` | Machine is in an invalid state for this command |
+| `2` (`0x02`) | `INVALID_STATE` | Machine is in an invalid state for this command |
+| `3` (`0x03`) | `CAPSULE_CONTAINER_FULL` | Spent capsule container is full |
+| `4` (`0x04`) | `OBSTACLE_DETECTED` | Obstacle detected in brew chamber or slider |
+| `5` (`0x05`) | `DESCALE_ON` | Machine is locked in descaling mode |
+| `6` (`0x06`) | `LAST_ACTION_NOT_FINISHED` | Previous operation is still running |
+| `7` (`0x07`) | `NOT_ABORTABLE_ACTION` | Current operation cannot be aborted |
+| `8` (`0x08`) | `SLIDER_OPEN` | **Capsule slider is open** — slide it closed to brew |
+| `9` (`0x09`) | `NO_PROGRAMMED_BREW_ACTIVE` | No scheduled brew timer is currently active to cancel |
+| `16` (`0x10`) | `PUMP_RUNNING` | Water pump is already running |
+| `17` (`0x11`) | `MOTOR_RUNNING` | Brew-chamber motor is currently moving |
+| `18` (`0x12`) | `SLIDER_NOT_BEEN_OPENED` | **Capsule not changed** — open and close the slider to load a fresh capsule |
+
+*(Note: Shorter 4-byte response frames on some firmware revisions place `0x24` at `bytes[2]` and the subcode at `bytes[3]`; parsers should check both offsets.)*
+
+---
+
+## 4. Command Payloads Written to `06aa3a42` (`CommandKey`)
+
+### 4.1 Brew Immediately OR Schedule Delayed Brew (`10 Bytes`)
+
+```text
+03 05 07 04  <DELAY_SEC_B3> <DELAY_SEC_B2> <DELAY_SEC_B1> <DELAY_SEC_B0>  <TEMP_BYTE>  <DRINK_ID>
+```
+
+- **Header (`Bytes 0..3`)**: `03 05 07 04`
+- **Countdown Delay (`Bytes 4..7`)**: 32-bit unsigned big-endian integer (`uint32 BE`) in **seconds**:
+  - `00 00 00 00` (`0 seconds`) = **Brew Immediately**
+  - `> 0` (e.g. `00 00 03 84` = `900 seconds` = 15 minutes) = **Schedule Hardware Countdown Brew**. The machine counts down autonomously and can be queried via `06aa3a32` (`6 bytes`).
+- **Temperature (`Byte 8`)**:
+  - `0x00` = **`MEDIUM`** (Standard Hot ~85°C — default)
+  - `0x01` = **`LOW`** (Warm ~80°C)
+  - `0x02` = **`HIGH`** (Extra Hot / Max ~90°C)
+- **Drink Identifier (`Byte 9`)**:
+  - `0x00` = **`RISTRETTO`**
+  - `0x01` = **`ESPRESSO`**
+  - `0x02` = **`LUNGO`**
+  - `0x04` = **`HOT_WATER`**
+  - `0x05` = **`AMERICANO`**
+  - `0x07` = **`CUSTOM_RECIPE`** (executes the custom volumetric recipe loaded into slot `00 00` via `01 10 08 ...`)
+
+### 4.2 Load Custom Volumetric Recipe & Pour Order (`11 Bytes`)
+
+Before triggering drink ID `0x07`, write this 11-byte recipe formulation frame to `06aa3a42`:
+
+```text
+01 10 08  00 00  <STEP1_TYPE> <STEP1_ML_HI> <STEP1_ML_LO>  <STEP2_TYPE> <STEP2_ML_HI> <STEP2_ML_LO>
+```
+
+- **Header (`Bytes 0..2`)**: `01 10 08` (`0x08` indicates the 8-byte recipe body that follows)
+- **Recipe Slot (`Bytes 3..4`)**: `00 00`
+- **Step 1 (`Bytes 5..7`) & Step 2 (`Bytes 8..10`)**:
+  - `TYPE`: `0x01` = **Coffee** (`15–130 ml`), `0x02` = **Hot Water** (`25–300 ml`), `0x00` = **Unused / Single-Ingredient Padding** (when the second ingredient volume is `0 ml`).
+  - `ML_HI, ML_LO`: 16-bit big-endian volume in milliliters.
+  - **Pour Sequence**:
+    - **Coffee First (`Coffee → Water`)**: Step 1 = `01 <coffee_hi> <coffee_lo>`, Step 2 = `02 <water_hi> <water_lo>`.
+    - **Water First (`Water → Coffee` Long Black)**: Step 1 = `02 <water_hi> <water_lo>`, Step 2 = `01 <coffee_hi> <coffee_lo>`.
+    - **Single-Ingredient Recipe** (e.g. `40 ml` Coffee + `0 ml` Water): Step 1 = `01 00 28`, Step 2 = `00 00 00`.
+
+### 4.3 Cancel / Abort Active Brew or Scheduled Timer (`4 Bytes`)
+
+```text
+03 06 01 02
+```
+
+Writing `03 06 01 02` to `06aa3a42` immediately stops an active extraction or cancels an active scheduled countdown timer. *(Note: `01 00` also halts the pump on older firmware revisions; sending `03 06 01 02` is the primary abort command.)*
+
+### 4.4 Factory Reset Machine (`3 Bytes`)
+
+```text
+03 07 00
+```
+
+Writing `03 07 00` to `06aa3a42` performs a complete machine factory reset (clears the enrolled pairing key so `06aa3a51` returns to `ABSENT`, and restores factory rotary dial cup volumes).
+
+---
+
+## 5. Machine Configuration Characteristics (`Service 06aa1940`)
+
+### 5.1 Auto-Off Standby Delay & Water Hardness (`06aa3a44`)
+
+Characteristic `06aa3a44` reads and writes a 3-byte configuration structure `[standbySecHi, standbySecLo, waterHardness]`:
+- **Standby Delay (`Bytes 0..1`, `uint16 BE` in seconds)**:
+  - `540` (`0x021C`) = **9 minutes**
+  - `1800` (`0x0708`) = **30 minutes**
+  - `7200` (`0x1C20`) = **2 hours**
+  - `28800` (`0x7080`) = **8 hours**
+- **Water Hardness (`Byte 2`, `uint8`)**:
+  - `0` = **Level 0** (Softest, `< 5 fH`)
+  - `1` = **Level 1** (`> 7 fH`)
+  - `2` = **Level 2** (`> 13 fH`)
+  - `3` = **Level 3** (`> 25 fH`)
+  - `4` = **Level 4** (Hardest, `> 38 fH`)
+- **Partial Updates (`0xFF` Wildcard Mask)**:
+  - **Update Standby Delay Only**: Write `[secHi, secLo, 0xFF]`.
+  - **Update Water Hardness Only**: Write `[0xFF, 0xFF, level]`.
