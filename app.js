@@ -13,6 +13,8 @@
  * ============================================================================
  */
 
+const APP_VERSION = '0.1.1';
+
 // 1. Bluetooth Low Energy UUID Definitions (Eugster/Frismag Nespresso Expert)
 const BLE_UUIDS = {
   // Services
@@ -800,5 +802,5 @@ window.addEventListener('DOMContentLoaded', () => {
   renderLibrary();
   updateCustomRecipeSummary();
   registerServiceWorker();
-  log('Notpresso Expert Controller initialized.', 'info');
+  log(`Notpresso Expert v${APP_VERSION} initialized.`, 'info');
 });

@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23C88D4B'><path d='M2 21h18v-2H2v2M20 8h-2V5h2m0-2H4v10a4 4 0 004 4h6a4 4 0 004-4v-3h2a2 2 0 002-2V5a2 2 0 00-2-2z'/></svg>">
 
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=0.1.1">
 </head>
 <body>
   <div class="app-container">
@@ -22,7 +22,7 @@
       <div class="brand">
         <div class="logo-icon">☕</div>
         <div>
-          <h1>Notpresso <span class="badge-expert">Expert</span></h1>
+          <h1>Notpresso <span class="badge-expert">Expert</span> <span class="badge-version">v0.1.1</span></h1>
           <p class="subtitle">EN 350.G Offline BLE Controller</p>
         </div>
       </div>
@@ -281,6 +281,7 @@
               <li>Copy the 16 hex characters (starts with 8) and paste above.</li>
             </ol>
           </div>
+          <div class="settings-version-tag">Notpresso Expert v0.1.1 • GitHub Pages</div>
         </div>
       </div>
     </div>
@@ -298,7 +299,7 @@
             <span id="logCounter" class="log-counter">0 events</span>
           </div>
           <div id="logConsole" class="log-console">
-            <div class="log-entry info">[System] Ready to connect to Nespresso Expert EN 350.G</div>
+            <div class="log-entry info">[System] Notpresso Expert v0.1.1 ready to connect to EN 350.G</div>
           </div>
         </div>
       </div>
@@ -308,6 +309,6 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=0.1.1"></script>
 </body>
 </html>
