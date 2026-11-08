@@ -41,8 +41,8 @@ IGNORED_PREFIXES = (
 
 def pairing_key_to_wire_hex(pairing_key_str: str) -> str:
     """
-    Exact Python implementation of PairingKey.prepareHashForPairing() + PairingKey.getBufferFromByteArray()
-    from com.nespresso.connect.communication.operation.pair.PairingKey.
+    Converts a 32-character stored pairing_key hash into the 16-character (8-byte)
+    BLE wire authentication token written to characteristic 06aa3a41.
 
     Takes the first 8 bytes (16 hex chars) of the 32-char pairing_key,
     shifts nibbles right by 4 bits across those 8 bytes, and sets the highest nibble to 0x8.

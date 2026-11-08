@@ -1,15 +1,14 @@
 /**
  * Notpresso Expert - Offline BLE Controller for Nespresso Expert EN 350.G (D80)
  *
- * Protocol specifications verified directly from decompiled Dalvik bytecode of
- * official Nespresso Android app v3.28.0 (com.nestle.connecteddevices.nespresso.*
- * in classes5.dex and com.nespresso.connect.* in classes4.dex).
+ * Implements the Nespresso Expert BLE GATT protocol, custom volumetric recipes,
+ * split-temperature two-stage orchestration, and in-chamber soak workflows.
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
 const APP_VERSION = '0.2.0';
 
-// 1. BLE GATT Service & Characteristic UUIDs (Verified from UuidTemplate.evaluate in classes5.dex)
+// 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
   // Service 1: Authentication, Device Info & Onboarding (6416 = 0x1910)
   SERVICE_AUTH:        '06aa1910-f22a-11e3-9daa-0002a5d5c51b',
@@ -38,12 +37,11 @@ const BLE_UUIDS = {
   CHAR_STOCK:          '06aa3a15-f22a-11e3-9daa-0002a5d5c51b'  // 2B Read/Write: CapsuleStock (uint16 BE)
 };
 
-// Default BLE Auth Key (Extracted from user's nespresso.ab -> MyMachines.pairing_key)
-const DEFAULT_AUTH_KEY = '8365D910D19E4740';
+// Default fallback BLE Auth Key (Override in Settings -> Auth Key; persisted in localStorage)
+const DEFAULT_AUTH_KEY = '82C15F832A864437';
 
 /**
- * Verified from MachineStateBuilder.defaultMachineStateFrom (classes5.dex, line 2566):
- * Byte 1 & 0x0F of 06aa3a12 (bits 12..15)
+ * Machine operational state enum (Byte 1 & 0x0F of 06aa3a12, bits 12..15)
  */
 const MACHINE_STATES = {
   0:  { label: 'Resetting',         isBusy: false },
@@ -65,8 +63,7 @@ const MACHINE_STATES = {
 };
 
 /**
- * Verified from CommandResponseBuilder.fromConditionNotFullFilled (classes5.dex, line 3329):
- * When responseCode == 0x24 (CONDITIONS_NOT_FULFILLED), the subcode byte maps to:
+ * CommandResponse (06aa3a52) rejection subcodes when responseCode == 0x24 (CONDITIONS_NOT_FULFILLED)
  */
 const CONDITION_NOT_FULFILLED_REASONS = {
   0x01: 'Invalid machine state for this command.',
@@ -274,7 +271,7 @@ function showToast(message) {
 
 const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
-// 5. PairingKey Codec (Verified from com.nespresso.connect.communication.operation.pair.PairingKey, codeOff=0x37bd98)
+// 5. PairingKey Codec (4-bit right nibble shift + 0x80 leading prefix)
 function convertDbHash32ToBleKey16(hex32) {
   const raw = hexToBytes(hex32.substring(0, 16));
   const out = new Uint8Array(8);
@@ -594,7 +591,7 @@ async function readInitialTelemetry() {
 
 // 8. Exact Bit-Level Telemetry & CommandResponse Parser
 function selectBit(bytes, startBit, endBit) {
-  // Exact port of ByteConversion.selectBit([B, int, int) from classes5.dex (codeOff=0x321b18)
+  // Big-endian bitfield extractor (Bit 0 = MSB 0x80 of Byte 0)
   let acc = 0;
   const maxBit = Math.min(endBit, bytes.length * 8 - 1);
   for (let bit = Math.max(0, startBit); bit <= maxBit; bit++) {
@@ -614,7 +611,7 @@ function handleRawCharacteristicBytes(uuid, bytes) {
   if (!bytes || bytes.length === 0) return;
 
   if (uuid === BLE_UUIDS.CHAR_MACHINE_STATUS && bytes.length >= 2) {
-    // Verified from MachineMonitoringOperations.fromByteToBuilder (classes5.dex, line 18578)
+    // Decode 48-bit MachineStatus bitfield (06aa3a12)
     const pairingState = selectBit(bytes, 1, 2);
     const errorPresent = getBitBoolean(bytes, 3);
     const descalingNeeded = getBitBoolean(bytes, 5);
@@ -675,7 +672,7 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     decodeCommandResponse(bytes);
 
   } else if (uuid === BLE_UUIDS.CHAR_SCHEDULE && bytes.length >= 6) {
-    // createProgrammedBrew (classes5.dex, line 10563): 4B seconds BE, 1B temp, 1B scheduleType
+    // Active scheduled brew (06aa3a32): 4B seconds BE, 1B temp, 1B scheduleType
     const sec = ((bytes[0] & 0xFF) << 24) | ((bytes[1] & 0xFF) << 16) | ((bytes[2] & 0xFF) << 8) | (bytes[3] & 0xFF);
     const tempCode = bytes[4] & 0xFF;
     const typeCode = bytes[5] & 0xFF;
@@ -689,7 +686,7 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     log(`[06aa3a32 Schedule] ${sec}s remaining, temp=${tempCode}, type=${typeCode}`, 'rx');
 
   } else if (uuid === BLE_UUIDS.CHAR_USER_SETTINGS && bytes.length >= 3) {
-    // GeneralUserOperations (classes5.dex, line 16673): [standbyHi, standbyLo, waterHardness]
+    // User configuration (06aa3a44): [standbyHi, standbyLo, waterHardness]
     const standbySec = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
     const hardness = bytes[2] & 0xFF;
     if ([540, 1800, 7200, 28800].includes(standbySec)) {
@@ -783,10 +780,10 @@ function updateConnectionUI() {
   }
 }
 
-// 9. Brew & Recipe Command Builders (Verified from BrewByteConversion in classes5.dex, line 3034)
+// 9. Brew & Recipe Command Builders (06aa3a42 CommandKey frames)
 
 /**
- * Builds the 11-byte writeRecipe payload (BrewByteConversion.getSetRecipePayload):
+ * Builds the 11-byte custom recipe definition payload:
  * [0x01, 0x10, 0x08, 0x00, 0x00, step1Type, step1Hi, step1Lo, step2Type, step2Hi, step2Lo]
  * If one ingredient has 0 ml, Step 1 holds the active ingredient and Step 2 is padded with [0x00, 0x00, 0x00].
  */

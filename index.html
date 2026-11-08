@@ -557,10 +557,10 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label" for="inputAuthKey">16-Char BLE Auth Key OR 32-Char DB `pairing_key`</label>
-            <input type="text" id="inputAuthKey" class="styled-input" placeholder="e.g. 8365d910d19e4740" maxlength="36">
+            <label class="form-label" for="inputAuthKey">16-Char BLE Auth Key OR 32-Char `pairing_key`</label>
+            <input type="text" id="inputAuthKey" class="styled-input" placeholder="e.g. 82C15F832A864437" maxlength="36">
             <small class="field-hint">
-              Paste your 16-char BLE Auth Key (starts with <code>8</code>) <strong>or</strong> the 32-char <code>pairing_key</code> from <code>nespresso_app_fusion.db</code> (auto-converted via <code>PairingKey.getBufferFromByteArray</code>).
+              Paste your 16-char BLE Auth Key (starts with <code>8</code>) <strong>or</strong> your 32-char <code>pairing_key</code> hash (auto-converted via 4-bit nibble shift).
             </small>
           </div>
 
@@ -572,10 +572,10 @@
           <hr class="divider">
 
           <div class="guide-box">
-            <h4>How to Recover Your Original Key Without Resetting:</h4>
+            <h4>How to Recover Your Enrolled Key Without Resetting:</h4>
             <ol>
-              <li>Run <code>adb backup -f nespresso.ab -noapk com.nespresso.activities</code> on the phone where the official Nespresso app is paired.</li>
-              <li>Run <code>python scripts/extract_auth_key.py nespresso.ab --save-env</code> to extract <code>MyMachines.pairing_key</code> from <code>nespresso_app_fusion.db</code>.</li>
+              <li>Run <code>adb backup -f nespresso.ab -noapk com.nespresso.activities</code> on the phone already paired with your machine.</li>
+              <li>Run <code>python scripts/extract_auth_key.py nespresso.ab --save-env</code> to extract the stored pairing key.</li>
               <li>Paste the resulting 16-char key above and tap <strong>Connect</strong>!</li>
             </ol>
           </div>
