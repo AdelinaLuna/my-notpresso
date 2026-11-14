@@ -1,4 +1,4 @@
-# Notpresso Expert (EN 350.G) — v0.7.0
+# Notpresso Expert (EN 350.G) — v0.7.1
 
 <div align="center">
   <h3>Standalone Offline BLE Alternative for Nespresso Expert EN 350.G</h3>
@@ -104,16 +104,15 @@ If you want native Android BLE bonding (`createBond()`), background service resi
 
 ```text
 my-notpresso/
-├── index.html                # v0.7.0 Mobile-first Web Bluetooth PWA interface (5 tabs + Manual/Descale UI)
+├── index.html                # v0.7.1 Mobile-first Web Bluetooth PWA interface (5 tabs + Manual/Descale UI)
 ├── styles.css                # Dark Espresso & Crema Gold theme for Samsung S24 Ultra
-├── app.js                    # v0.7.0 BLE GATT engine, Expandable Presets, Per-Cup Temp Override, Drag Reorder, Capsule Stock Counter, LED Telematics, Descale Guide, Split-Temp & Bloom/Clean
+├── app.js                    # v0.7.1 BLE GATT engine, Expandable Presets, Per-Cup Temp Override, Drag Reorder, Capsule Stock Counter, LED Telematics, Descale Guide, Split-Temp & Bloom/Clean
 ├── manifest.json             # PWA configuration for Add-to-Homescreen
-├── sw.js                     # Offline caching Service Worker (v0.7.0)
+├── sw.js                     # Offline caching Service Worker (v0.7.1)
 ├── server.py                 # Optional local Python server with Wi-Fi IP display
 ├── scripts/
 │   └── extract_auth_key.py   # Extracts 16-char BLE Auth Key from nespresso.ab / SQLite DB
-├── documentation/            # Complete reverse-engineered BLE protocol docs & NespressoExpertEN350G.pdf manual
-└── flutter_src/              # Reference Dart / Flutter BLE service implementation
+└── documentation/            # Complete reverse-engineered BLE protocol docs & NespressoExpertEN350G.pdf manual
 ```
 
 ---
