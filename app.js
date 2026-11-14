@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.6.1';
+const APP_VERSION = '0.6.2';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -547,29 +547,40 @@ function persistSavedRecipes() {
 }
 
 // 7. BLE Read / Write / Connect Abstraction
+let gattQueue = Promise.resolve();
+function enqueueGattOp(fn) {
+  const next = gattQueue.then(fn, fn);
+  gattQueue = next.catch(() => {});
+  return next;
+}
+
 async function writeBleCharacteristic(uuid, uint8Bytes) {
-  if (state.isNativeAndroid) {
-    window.AndroidBle.writeCharacteristicHex(uuid, bytesToHexNoSpaces(uint8Bytes));
-    return;
-  }
-  const ch = state.characteristics.get(uuid);
-  if (!ch) throw new Error(`Characteristic ${uuid.substring(4, 8)} not available`);
-  if (ch.writeValueWithResponse) {
-    await ch.writeValueWithResponse(uint8Bytes);
-  } else {
-    await ch.writeValue(uint8Bytes);
-  }
+  return enqueueGattOp(async () => {
+    if (state.isNativeAndroid) {
+      window.AndroidBle.writeCharacteristicHex(uuid, bytesToHexNoSpaces(uint8Bytes));
+      return;
+    }
+    const ch = state.characteristics.get(uuid);
+    if (!ch) throw new Error(`Characteristic ${uuid.substring(4, 8)} not available`);
+    if (ch.writeValueWithResponse) {
+      await ch.writeValueWithResponse(uint8Bytes);
+    } else {
+      await ch.writeValue(uint8Bytes);
+    }
+  });
 }
 
 async function readBleCharacteristic(uuid) {
-  if (state.isNativeAndroid) {
-    window.AndroidBle.readCharacteristic(uuid);
-    return null;
-  }
-  const ch = state.characteristics.get(uuid);
-  if (!ch) throw new Error(`Characteristic ${uuid.substring(4, 8)} not available`);
-  const val = await ch.readValue();
-  return new Uint8Array(val.buffer);
+  return enqueueGattOp(async () => {
+    if (state.isNativeAndroid) {
+      window.AndroidBle.readCharacteristic(uuid);
+      return null;
+    }
+    const ch = state.characteristics.get(uuid);
+    if (!ch) throw new Error(`Characteristic ${uuid.substring(4, 8)} not available`);
+    const val = await ch.readValue();
+    return new Uint8Array(val.buffer);
+  });
 }
 
 async function connectBle() {
@@ -618,8 +629,8 @@ async function connectBle() {
     updateConnectionUI();
     showToast(`Connected to ${device.name || 'Expert EN 350.G'}`);
 
-    // Read initial diagnostics in background
-    readInitialTelemetry();
+    // Read initial diagnostics before releasing connect flow
+    await readInitialTelemetry();
   } catch (err) {
     state.isScanning = false;
     updateConnectionUI();
