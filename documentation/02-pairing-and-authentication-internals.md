@@ -87,8 +87,9 @@ When a client connects to the Nespresso Expert, reading the 1-byte characteristi
 
 If you ever lose the original key or wish to enroll a fresh key:
 - **Via BLE (while authenticated)**: Write `03 07 00` (`3 bytes`) to `06aa3a42`.
-- **Via Physical Machine Controls**:
-  1. Turn the machine on and ensure the capsule slider is **closed** (with no capsule inside).
-  2. Turn the front rotary dial to **Lungo**.
-  3. Press and hold the **Temperature** button for **6–10 seconds** until the indicators blink rapidly.
-  4. The machine resets `06aa3a51` to `ABSENT` (`0x00`/`0x01`) and restores default cup volumes.
+- **Via Physical Machine Controls** (Manual p. 15):
+  1. Ensure the machine is **OFF** and the capsule **slider is closed**.
+  2. Press and hold the **Brewing button for 6 seconds** (both dials flash to confirm entry into Settings mode).
+  3. Turn the beverage dial to **Lungo** and press the **Brewing button** to select Factory Reset.
+  4. Turn the **Temperature dial to maximum** and press the **Brewing button** to confirm (all lights blink to confirm reset).
+  5. The machine resets `06aa3a51` to `ABSENT` (`0x00`/`0x01`), cancels capsule stock management, and restores factory default cup volumes (`Ristretto 25 ml`, `Espresso 40 ml`, `Lungo 110 ml`, `Americano 25 ml + 125 ml`, `Hot Water 200 ml`), Auto-Off (`9 min`), and Water Hardness (`Hard / Level 3`).

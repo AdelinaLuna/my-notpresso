@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.7.2';
+const APP_VERSION = '0.7.3';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -133,7 +133,7 @@ const state = {
   waterTankEmpty: false,
   capsuleContainerFull: false,
   descalingNeeded: false,
-  waterHardnessLevel: 2,
+  waterHardnessLevel: 3,
   sliderOpen: false,
   obstacleDetected: false,
   errorPresent: false,
@@ -2262,11 +2262,11 @@ function applyAppCalibrationProfile() {
 
 // 14b. Live LED Telematics Decoder & Interactive Descaling Guide
 const WATER_HARDNESS_INFO = {
-  0: { label: 'Level 0 (<5 fH)', cups: 4000 },
-  1: { label: 'Level 1 (>7 fH)', cups: 3000 },
-  2: { label: 'Level 2 (>13 fH)', cups: 2000 },
-  3: { label: 'Level 3 (>25 fH)', cups: 1500 },
-  4: { label: 'Level 4 (>38 fH)', cups: 1000 }
+  0: { label: 'Level 0: Very Soft (<5 °fH / <3 °dH)', cups: 4000 },
+  1: { label: 'Level 1: Soft (>7 °fH / >4 °dH)', cups: 3000 },
+  2: { label: 'Level 2: Medium (>13 °fH / >7 °dH)', cups: 2000 },
+  3: { label: 'Level 3: Hard (Default, >25 °fH / >14 °dH)', cups: 1500 },
+  4: { label: 'Level 4: Very Hard (>38 °fH / >21 °dH)', cups: 1000 }
 };
 
 function describeLedTelematics({ stateCode, descalingNeeded, waterTankEmpty, capsuleContainerFull, sliderOpen, capsuleStockLow, errorPresent, obstacleDetected }) {
@@ -2562,8 +2562,8 @@ async function prepareDescaleViaBle() {
   updateDescaleGuideUI();
 
   if (!state.isConnected) {
-    const hLevel = parseInt(el.selectWaterHardness ? el.selectWaterHardness.value : '2', 10);
-    const hInfo = WATER_HARDNESS_INFO[hLevel] || WATER_HARDNESS_INFO[2];
+    const hLevel = parseInt(el.selectWaterHardness ? el.selectWaterHardness.value : '3', 10);
+    const hInfo = WATER_HARDNESS_INFO[hLevel] || WATER_HARDNESS_INFO[3];
     if (el.descalePrepStatus) {
       el.descalePrepStatus.textContent = `Offline checklist ready • Configured hardness: ${hInfo.label} (${hInfo.cups} cups interval). Connect via BLE for live sensor checks & step tracking.`;
     }
@@ -2584,7 +2584,7 @@ async function prepareDescaleViaBle() {
       await sleep(100);
     }
 
-    const hInfo = WATER_HARDNESS_INFO[state.waterHardnessLevel] || WATER_HARDNESS_INFO[2];
+    const hInfo = WATER_HARDNESS_INFO[state.waterHardnessLevel] || WATER_HARDNESS_INFO[3];
     const sliderTxt = state.sliderOpen ? 'OPEN ✗ (Close slider!)' : 'Closed ✓';
     const binTxt = state.capsuleContainerFull ? 'FULL ✗ (Empty bin!)' : 'OK ✓';
     const descaleTxt = state.descalingNeeded ? 'Needed ⚠️' : 'OK ✓';
