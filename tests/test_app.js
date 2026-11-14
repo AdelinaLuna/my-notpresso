@@ -311,7 +311,9 @@ function createAppHarness(options = {}) {
   rootGroups.set('.drink-card[data-drink]', ['hot-water', 'ristretto', 'espresso', 'lungo', 'americano', 'great-americano'].map(
     (drink) => {
       const card = createMockElement('div', { class: 'drink-card', 'data-drink': drink });
-      card.appendChild(createMockElement('div', { class: 'drink-card-main' }));
+      const mainRow = createMockElement('div', { class: 'drink-card-main' });
+      mainRow.appendChild(createMockElement('div', { class: 'drink-vol' }));
+      card.appendChild(mainRow);
       card.appendChild(createMockElement('button', { class: 'btn-preset-quick' }));
       card.appendChild(createMockElement('div', { class: 'drink-expand-panel' }));
       return card;
@@ -1085,8 +1087,35 @@ test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order sw
   state.isConnected = true;
   h.ctx.writeBleCharacteristic = async (u, b) => txs.push(h.ctx.bytesToHexNoSpaces(b));
 
-  // Two-phase preset panels (Americano & Great Americano XL) have consistent Brew Temperature UI, swap button, and no drag handle
+  // Preset defaults & card unification (v0.13.2): Hot Water 250ml@Max, XL water-first, no Split-Temp pill/highlight
+  const defaults = h.eval('PRESET_DRINK_DEFAULTS');
+  assert.equal(defaults.hotwater.waterMl, 250);
+  assert.equal(defaults.hotwater.temp, 2);
+  assert.equal(defaults['great-americano'].seq, 'water-first');
+  assert.equal(defaults['great-americano'].waterTemp, 1);
+  assert.equal(defaults['great-americano'].coffeeTemp, 2);
+  assert.equal(defaults['great-americano'].actionLabel, 'Brew');
+  assert.equal(INDEX_HTML.includes('class="mini-pill">Split-Temp'), false);
+  assert.equal(INDEX_HTML.includes('id="btnGreatAmericanoPreset" class="drink-card highlight-card"'), false);
+
+  txs.length = 0;
+  await h.ctx.executePresetDrink('hotwater', false);
+  assert.equal(txs[0], '01100800000200FA000000');
+  assert.equal(txs[1], '03050704000000000207');
+
+  // Machine dial target volumes (4 & 5) sync directly into Americano preset defaults & subtitle
   const ameCard = h.rootGroups.get('.drink-card[data-drink]').find(c => c.dataset.drink === 'americano');
+  h.ctx.applyMachineCupTargetVolume(4, 35);
+  h.ctx.applyMachineCupTargetVolume(5, 150);
+  assert.equal(defaults.americano.coffeeMl, 35);
+  assert.equal(defaults.americano.waterMl, 150);
+  assert.equal(state.presetTweaks.americano.coffeeMl, 35);
+  assert.equal(state.presetTweaks.americano.waterMl, 150);
+  assert.match(ameCard.querySelector('.drink-vol').textContent, /35ml \+ 150ml/);
+  h.ctx.applyMachineCupTargetVolume(4, 25);
+  h.ctx.applyMachineCupTargetVolume(5, 125);
+
+  // Two-phase preset panels (Americano & Great Americano XL) have consistent Brew Temperature UI, swap button, and no drag handle
   const gxlCard = h.rootGroups.get('.drink-card[data-drink]').find(c => c.dataset.drink === 'great-americano');
   const amePanel = ameCard.querySelector('.drink-expand-panel');
   const gxlPanel = gxlCard.querySelector('.drink-expand-panel');

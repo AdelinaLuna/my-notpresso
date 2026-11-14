@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.1';
+const APP_VERSION = '0.13.2';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -104,12 +104,12 @@ const CONDITION_NOT_FULFILLED_REASONS = {
 };
 
 const PRESET_DRINK_DEFAULTS = {
-  hotwater:          { name: 'Hot Water',          sizeCode: 4,    coffeeMl: 0,   waterMl: 200, temp: 0,       splitTemp: false, actionLabel: 'Dispense' },
+  hotwater:          { name: 'Hot Water',          sizeCode: 4,    coffeeMl: 0,   waterMl: 250, temp: 2,       splitTemp: false, actionLabel: 'Dispense' },
   ristretto:         { name: 'Ristretto',          sizeCode: 0,    coffeeMl: 25,  waterMl: 0,   temp: 0,       splitTemp: false, actionLabel: 'Brew' },
   espresso:          { name: 'Espresso',           sizeCode: 1,    coffeeMl: 40,  waterMl: 0,   temp: 0,       splitTemp: false, actionLabel: 'Brew' },
   lungo:             { name: 'Lungo',              sizeCode: 2,    coffeeMl: 110, waterMl: 0,   temp: 0,       splitTemp: false, actionLabel: 'Brew' },
   americano:         { name: 'Americano',          sizeCode: 5,    coffeeMl: 25,  waterMl: 125, temp: 0, coffeeTemp: 0, waterTemp: 0, seq: 'coffee-first', splitTemp: false, actionLabel: 'Brew' },
-  'great-americano': { name: 'Great Americano XL', sizeCode: null, coffeeMl: 40,  waterMl: 160, temp: 2, coffeeTemp: 2, waterTemp: 1, seq: 'coffee-first', splitTemp: true,  actionLabel: '2-Stage' }
+  'great-americano': { name: 'Great Americano XL', sizeCode: null, coffeeMl: 40,  waterMl: 160, temp: 2, coffeeTemp: 2, waterTemp: 1, seq: 'water-first',  splitTemp: true,  actionLabel: 'Brew' }
 };
 
 // 2. Application State
@@ -169,6 +169,8 @@ const state = {
   capsuleStockThreshold: null,
   selectedErrorSlot: 0,
   lastErrorRecord: null,
+  machineDialVolumes: { 0: 25, 1: 40, 2: 110, 3: 200, 4: 25, 5: 125 },
+  lastCupTargetIdx: null,
   serialNumber: '--',
   firmwareVersion: '--',
 
@@ -785,6 +787,21 @@ async function readInitialTelemetry() {
       await sleep(120);
     } catch (_) {}
   }
+
+  if (state.characteristics.has(BLE_UUIDS.CHAR_CUP_TARGET) && state.characteristics.has(BLE_UUIDS.CHAR_CUP_VOLUME)) {
+    for (const targetIdx of [4, 5]) {
+      try {
+        state.lastCupTargetIdx = targetIdx;
+        await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_TARGET, new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]));
+        await sleep(120);
+        const volBytes = await readBleCharacteristic(BLE_UUIDS.CHAR_CUP_VOLUME);
+        if (volBytes && volBytes.length >= 2) {
+          const vol = ((volBytes[0] & 0xFF) << 8) | (volBytes[1] & 0xFF);
+          applyMachineCupTargetVolume(targetIdx, vol);
+        }
+      } catch (_) {}
+    }
+  }
 }
 
 // 8. Exact Bit-Level Telemetry & CommandResponse Parser
@@ -835,6 +852,32 @@ function parseFaultRecordBytes(bytes, slotIdx = 0) {
     ? `Slot ${slotIdx}: None (OK)`
     : `Slot ${slotIdx}: #${errNum} ${category} (sub 0x${errSub.toString(16).padStart(2, '0')})`;
   return { slot: slotIdx, errNum, errCat, category, errSub, isEmpty, summary };
+}
+
+function applyMachineCupTargetVolume(targetIdx, volMl) {
+  if (typeof volMl !== 'number' || Number.isNaN(volMl) || volMl < 10 || volMl > 500) return;
+  if (state.machineDialVolumes) state.machineDialVolumes[targetIdx] = volMl;
+  if (targetIdx === 4 && volMl >= 15 && volMl <= 130) {
+    PRESET_DRINK_DEFAULTS.americano.coffeeMl = volMl;
+    if (state.presetTweaks && state.presetTweaks.americano) {
+      state.presetTweaks.americano.coffeeMl = volMl;
+    }
+  } else if (targetIdx === 5 && volMl >= 25 && volMl <= 300) {
+    PRESET_DRINK_DEFAULTS.americano.waterMl = volMl;
+    if (state.presetTweaks && state.presetTweaks.americano) {
+      state.presetTweaks.americano.waterMl = volMl;
+    }
+  } else {
+    return;
+  }
+  const ameCard = Array.from(el.presetDrinkCards || []).find(c => c.dataset && c.dataset.drink === 'americano');
+  if (ameCard) {
+    const volLabel = ameCard.querySelector('.drink-vol');
+    if (volLabel) {
+      volLabel.textContent = `Rotary Dial Preset (${PRESET_DRINK_DEFAULTS.americano.coffeeMl}ml + ${PRESET_DRINK_DEFAULTS.americano.waterMl}ml)`;
+    }
+    syncPresetCardUI(ameCard, 'americano');
+  }
 }
 
 function handleRawCharacteristicBytes(uuid, bytes) {
@@ -965,6 +1008,10 @@ function handleRawCharacteristicBytes(uuid, bytes) {
   } else if (uuid === BLE_UUIDS.CHAR_CUP_VOLUME && bytes.length >= 2) {
     const vol = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
     if (vol >= 10 && vol <= 500) {
+      const targetIdx = state.lastCupTargetIdx !== null && state.lastCupTargetIdx !== undefined
+        ? state.lastCupTargetIdx
+        : parseInt(el.selectCupTarget.value, 10);
+      applyMachineCupTargetVolume(targetIdx, vol);
       el.inputCupVolume.value = vol;
       el.valCupTargetMl.textContent = `${vol} ml`;
       showToast(`Dial volume read: ${vol} ml`);
@@ -1566,6 +1613,7 @@ async function readDialCupSize() {
     return;
   }
   const targetIdx = parseInt(el.selectCupTarget.value, 10);
+  state.lastCupTargetIdx = targetIdx;
   const targetPayload = new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]);
   log(`Selecting CupTarget ${targetIdx} on 06aa3a14: ${bytesToHex(targetPayload)}`, 'tx');
   try {
@@ -1585,6 +1633,7 @@ async function writeDialCupSize() {
     return;
   }
   const targetIdx = parseInt(el.selectCupTarget.value, 10);
+  state.lastCupTargetIdx = targetIdx;
   const volMl = parseInt(el.inputCupVolume.value, 10);
   const targetPayload = new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]);
   const volPayload = new Uint8Array([(volMl >> 8) & 0xFF, volMl & 0xFF, 0xFF, 0xFF]);
@@ -1594,6 +1643,7 @@ async function writeDialCupSize() {
     await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_TARGET, targetPayload);
     await sleep(200);
     await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_VOLUME, volPayload);
+    applyMachineCupTargetVolume(targetIdx, volMl);
     showToast(`Saved ${volMl} ml to rotary dial!`);
   } catch (err) {
     log(`Cup size write error: ${err.message}`, 'err');
@@ -3075,7 +3125,10 @@ function executePresetDrink(drinkKey, useTweaks = false) {
   if (cfg.temp === 0 || cfg.temp === 1 || cfg.temp === 2) {
     state.selectedTemp = cfg.temp;
   }
-  const volChanged = useTweaks && (cfg.coffeeMl !== def.coffeeMl || cfg.waterMl !== def.waterMl);
+  const dialVol = drinkKey === 'hotwater' ? ((state.machineDialVolumes && state.machineDialVolumes[3]) || 200) : def.coffeeMl;
+  const volChanged = drinkKey === 'hotwater'
+    ? (cfg.waterMl !== dialVol)
+    : (useTweaks && (cfg.coffeeMl !== def.coffeeMl || cfg.waterMl !== def.waterMl));
   if (!volChanged) {
     return brewPreset(def.name, def.sizeCode, cfg.temp);
   }
@@ -3371,8 +3424,8 @@ function initListeners() {
     state.customCoffeeTemp = 2;
     state.customWaterTemp = 1;
     state.customSplitTemp = true;
-    setCustomStageOrder('coffee-first');
-    showToast('Loaded Great Americano (40ml @ Max + 160ml @ Warm)');
+    setCustomStageOrder('water-first');
+    showToast('Loaded Great Americano XL (160ml @ Warm → 40ml @ Max)');
   });
 
   el.seqButtonsCustom.forEach(btn => {

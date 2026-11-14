@@ -15,7 +15,12 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.13.1
+## 2. What's New in v0.5.0 – v0.13.2
+
+- **`v0.13.2` — Unified Two-Phase Cards, Dial-Synced Americano & Water-First XL**:
+  - Unified **Great Americano XL** styling with `Americano` (removed `highlight-card` and `Split-Temp` badge, standardized on `Brew` actions) since both now support per-stage 3x temperatures and stage swapping.
+  - Configured **Americano** to automatically adopt the machine's rotary dial targets `4` & `5` (or factory `25ml Coffee → 125ml Water @ Hot 85°C` fallback), and **Great Americano XL** to default to the reverse **`160ml Water (Warm 80°C) → 40ml Coffee (Max 90°C)`** order.
+  - Updated **Hot Water** preset defaults to **`250 ml` @ `Max ~90°C`**.
 
 - **`v0.13.1` — Consistent Stage Brew Temperature UI & One-Tap Stage Swap**:
   - Unified the two-phase stage `"Brew Temperature"` label and active chip styling (`Americano`, `Great Americano XL`, and Custom Builder) to match single-stage preset cards (`Lungo`).
