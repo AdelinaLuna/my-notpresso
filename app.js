@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.4.0';
+const APP_VERSION = '0.4.1';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -125,6 +125,7 @@ const state = {
   descalingNeeded: false,
   waterHardnessLevel: 2,
   sliderOpen: false,
+  obstacleDetected: false,
   pairingKeyStateByte: -1,
   capsuleStock: null,
   serialNumber: '--',
@@ -769,7 +770,9 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     }
     if (bytes.length >= 6) {
       const sliderOpen = !getBitBoolean(bytes, 46);
+      const obstacleDetected = getBitBoolean(bytes, 47);
       state.sliderOpen = sliderOpen;
+      state.obstacleDetected = obstacleDetected;
       el.chipSliderState.textContent = sliderOpen ? 'Open' : 'Closed';
     }
 
@@ -780,6 +783,7 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     if (capsuleContainerFull) warnings.push('Bin Full');
     if (descalingNeeded) warnings.push('Descale');
     if (errorPresent) warnings.push('Error');
+    if (state.obstacleDetected) warnings.push('Obstacle');
 
     const mState = MACHINE_STATES[stateCode] || { label: `State ${stateCode}`, isBusy: false };
     const statusLabel = warnings.length > 0 ? `${mState.label} (${warnings.join(', ')})` : mState.label;
@@ -795,7 +799,8 @@ function handleRawCharacteristicBytes(uuid, bytes) {
       capsuleContainerFull,
       sliderOpen: state.sliderOpen,
       capsuleStockLow,
-      errorPresent
+      errorPresent,
+      obstacleDetected: state.obstacleDetected
     });
     syncDescaleStepFromTelemetry(prevState, stateCode, waterTankEmpty, descalingNeeded);
 
@@ -876,15 +881,30 @@ function decodeCommandResponse(bytes) {
   let respCode = bytes.length >= 5 ? bytes[3] : (bytes.length >= 4 ? bytes[2] : bytes[0]);
   let subCode = bytes.length >= 5 ? bytes[4] : (bytes.length >= 4 ? bytes[3] : 0);
 
+  const rejectCommand = (reason) => {
+    log(`[06aa3a52 Command Rejected] ${reason} (${hex})`, 'err');
+    state.activeWorkflow = null;
+    clearInterval(state.soakInterval);
+    el.soakControlBox.classList.add('hidden');
+    finishBrewTracking();
+    el.brewModal.classList.add('hidden');
+    if (el.ledTelematicsBanner) {
+      el.ledTelematicsBanner.classList.remove('hidden', 'led-state-warn');
+      el.ledTelematicsBanner.classList.add('led-state-err');
+      el.ledBannerDot.className = 'led-dot led-err led-blink';
+      el.ledBannerTitle.textContent = 'Brew Command Rejected by Machine';
+      el.ledBannerDesc.textContent = reason;
+    }
+    showToast(reason);
+  };
+
   if (respCode === 0x20 || (bytes[0] & 0xF0) === 0x80) {
     log(`[06aa3a52 CommandResponse] ACK / DONE (${hex})`, 'rx');
   } else if (respCode === 0x36) {
-    log(`[06aa3a52 Command Rejected] OUT_OF_RANGE (0x36): Requested volume out of bounds (${hex})`, 'err');
-    showToast('Command rejected: Volume out of hardware range!');
+    rejectCommand('Command rejected: Volume out of hardware range (0x36).');
   } else if (respCode === 0x24 || (bytes[0] & 0xC0) === 0xC0) {
     const reason = CONDITION_NOT_FULFILLED_REASONS[subCode] || `Condition not fulfilled (0x24, subcode 0x${subCode.toString(16)})`;
-    log(`[06aa3a52 Command Rejected] ${reason} (${hex})`, 'err');
-    showToast(reason);
+    rejectCommand(reason);
   } else {
     log(`[06aa3a52 CommandResponse] ${hex}`, 'rx');
   }
@@ -1948,12 +1968,14 @@ const WATER_HARDNESS_INFO = {
   4: { label: 'Level 4 (>38 fH)', cups: 1000 }
 };
 
-function describeLedTelematics({ stateCode, descalingNeeded, waterTankEmpty, capsuleContainerFull, sliderOpen, capsuleStockLow, errorPresent }) {
-  if (stateCode === 8 || errorPresent) {
+function describeLedTelematics({ stateCode, descalingNeeded, waterTankEmpty, capsuleContainerFull, sliderOpen, capsuleStockLow, errorPresent, obstacleDetected }) {
+  if (stateCode === 8 || errorPresent || obstacleDetected) {
     return {
       level: 'err', blink: true, showDescale: !!descalingNeeded,
-      title: 'Maintenance LED Alert — Hardware Error',
-      desc: 'Fault detected. Check capsule chamber/water tank or power-cycle machine.'
+      title: obstacleDetected ? 'Maintenance LED Alert — Obstacle Detected' : 'Maintenance LED Alert — Hardware Error',
+      desc: obstacleDetected
+        ? 'Obstacle detected in slider or brewing unit. Open slider and clear chamber.'
+        : 'Fault detected. Check capsule chamber/water tank or power-cycle machine.'
     };
   }
   if (stateCode === 10) {
