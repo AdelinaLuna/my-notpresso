@@ -621,41 +621,44 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.recipe-reorder-col {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.recipe-drag-handle {
+  color: var(--text-dim);
+  font-size: 16px;
+  letter-spacing: -2px;
+  padding: 6px 4px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
   flex-shrink: 0;
-}
-
-.btn-reorder {
-  background: var(--bg-chip);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  border-radius: 4px;
-  width: 26px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  cursor: pointer;
-  transition: all 0.15s ease;
   line-height: 1;
-  padding: 0;
 }
 
-.btn-reorder:hover:not(:disabled) {
-  background: var(--accent-gold-muted);
+.recipe-drag-handle:hover,
+.recipe-drag-handle:active {
   color: var(--accent-gold);
-  border-color: var(--accent-gold);
 }
 
-.btn-reorder:disabled {
-  opacity: 0.2;
-  cursor: not-allowed;
+.is-reordering {
+  touch-action: none;
+}
+
+.recipe-item.is-dragging,
+.home-favorite-card.is-dragging {
+  border-color: var(--accent-gold);
+  background: var(--bg-card-hover);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  transform: scale(1.015);
+  opacity: 0.96;
+  cursor: grabbing;
+  position: relative;
+  z-index: 5;
+  touch-action: none;
 }
 
 .recipe-info-col {
@@ -761,7 +764,9 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  transition: all 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
 .home-favorite-card:hover {

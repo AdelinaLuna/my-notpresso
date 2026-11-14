@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'><rect x='6' y='14' width='13' height='40' rx='3' fill='%231E2430' stroke='%23C88D4B' stroke-width='2'/><path d='M8 26h9v26H8z' fill='%233A82EE' fill-opacity='0.35'/><rect x='7' y='10' width='11' height='4' rx='1.5' fill='%23C88D4B'/><rect x='21' y='8' width='37' height='46' rx='5' fill='%23242936' stroke='%23C88D4B' stroke-width='2.2'/><line x1='25' y1='14' x2='41' y2='14' stroke='%238E95A5' stroke-width='2.2' stroke-linecap='round'/><circle cx='49' cy='14' r='3' fill='%23101216' stroke='%23C88D4B' stroke-width='1.8'/><circle cx='40' cy='25' r='6' fill='%23101216' stroke='%23C88D4B' stroke-width='2'/><line x1='40' y1='25' x2='40' y2='20.5' stroke='%23DF9E56' stroke-width='1.8' stroke-linecap='round'/><circle cx='40' cy='39' r='5' fill='%23101216' stroke='%23C88D4B' stroke-width='1.8'/><line x1='40' y1='39' x2='43.5' y2='39' stroke='%23DF9E56' stroke-width='1.8' stroke-linecap='round'/><path d='M37 46h6v3.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 37 49.5V46z' fill='%23C88D4B'/><rect x='29' y='54' width='22' height='4' rx='2' fill='%23C88D4B'/></svg>">
 
-  <link rel="stylesheet" href="styles.css?v=0.5.0">
+  <link rel="stylesheet" href="styles.css?v=0.5.1">
 </head>
 <body>
   <div class="app-container">
@@ -189,7 +189,7 @@
           <label class="card-title" style="margin-bottom:0;">⭐ My Favorites & Suggestions</label>
           <button type="button" id="btnJumpToLibrary" class="btn-xs">Manage in Library ↗</button>
         </div>
-        <p class="card-desc" style="margin-top:4px;">1-tap custom brews calibrated to your taste. Reorder, rename, or edit anytime in the Library tab.</p>
+        <p class="card-desc" style="margin-top:4px;">1-tap custom brews calibrated to your taste. Hold and drag items to reorder, or manage anytime in Library.</p>
         <div id="homeFavoritesList" class="home-favorites-grid">
           <!-- Rendered dynamically from state.savedRecipes -->
         </div>
@@ -464,7 +464,7 @@
       <div class="library-header">
         <div>
           <h2 class="card-title" style="margin-bottom:2px;">⭐ My Favorites & Library</h2>
-          <p class="card-desc" style="margin:0;">Organize, rename, reorder, and brew your favorite recipes.</p>
+          <p class="card-desc" style="margin:0;">Hold and drag to reorder, rename, override temperature, or brew your saved recipes.</p>
         </div>
         <span id="libraryCount" class="badge-count">0 items</span>
       </div>
@@ -799,7 +799,7 @@
     <div id="settingsModal" class="modal-backdrop hidden">
       <div class="modal-card">
         <div class="modal-header">
-          <h3>Settings & Pairing Key <span class="badge-version">v0.5.0</span></h3>
+          <h3>Settings & Pairing Key <span class="badge-version">v0.5.1</span></h3>
           <button id="btnCloseSettings" class="close-btn">&times;</button>
         </div>
         <div class="modal-body">
@@ -826,7 +826,7 @@
               <li>Paste the resulting 16-char key above and tap <strong>Connect</strong>!</li>
             </ol>
           </div>
-          <div class="settings-version-tag">Notpresso Expert v0.5.0 • Offline BLE Controller</div>
+          <div class="settings-version-tag">Notpresso Expert v0.5.1 • Offline BLE Controller</div>
         </div>
       </div>
     </div>
@@ -997,7 +997,7 @@
             <span id="logCounter" class="log-counter">0 events</span>
           </div>
           <div id="logConsole" class="log-console">
-            <div class="log-entry info">[System] Notpresso Expert v0.5.0 ready to connect to EN 350.G</div>
+            <div class="log-entry info">[System] Notpresso Expert v0.5.1 ready to connect to EN 350.G</div>
           </div>
         </div>
       </div>
@@ -1007,6 +1007,6 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="app.js?v=0.5.0"></script>
+  <script src="app.js?v=0.5.1"></script>
 </body>
 </html>

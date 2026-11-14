@@ -1,4 +1,4 @@
-# Notpresso Expert (EN 350.G) — v0.5.0
+# Notpresso Expert (EN 350.G) — v0.5.1
 
 <div align="center">
   <h3>Standalone Offline BLE Alternative for Nespresso Expert EN 350.G</h3>
@@ -41,7 +41,7 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
      - **Cleaning Capsules** (`130 ml` Coffee + `0 ml` Water, Extra Hot ~90°C)
      - Plus **Great Americano XL (Split-Temp)** and multi-stage **Cleaning Capsule / Pre-Infusion Bloom** cycles.
 6. **Full Library Organization, Reordering & Renaming (v0.3.0)**:
-   - **Reordering**: Move Up 🔼 and Move Down 🔽 buttons on every saved item to reorder your favorites.
+   - **Reordering**: Long-press and hold (`⋮⋮` handle or card) to drag items directly to any position in Favorites or Library (`v0.5.1`).
    - **Renaming**: Inline ✏️ Rename modal for changing any recipe name anytime.
    - **Edit / Tweak**: 🎛️ Edit button that loads any existing recipe back into the Custom or Bloom builder for tweaking.
    - **Restore Curated**: 1-tap button to restore the Nespresso app suggestions if desired.
@@ -104,11 +104,11 @@ If you want native Android BLE bonding (`createBond()`), background service resi
 
 ```text
 my-notpresso/
-├── index.html                # v0.5.0 Mobile-first Web Bluetooth PWA interface (5 tabs + Manual/Descale UI)
+├── index.html                # v0.5.1 Mobile-first Web Bluetooth PWA interface (5 tabs + Manual/Descale UI)
 ├── styles.css                # Dark Espresso & Crema Gold theme for Samsung S24 Ultra
-├── app.js                    # v0.5.0 BLE GATT engine, Per-Cup Temp Override, LED Telematics, Descale Guide, Split-Temp & Bloom/Clean orchestrator
+├── app.js                    # v0.5.1 BLE GATT engine, Per-Cup Temp Override, Drag Reorder, LED Telematics, Descale Guide, Split-Temp & Bloom/Clean orchestrator
 ├── manifest.json             # PWA configuration for Add-to-Homescreen
-├── sw.js                     # Offline caching Service Worker (v0.5.0)
+├── sw.js                     # Offline caching Service Worker (v0.5.1)
 ├── server.py                 # Optional local Python server with Wi-Fi IP display
 ├── scripts/
 │   └── extract_auth_key.py   # Extracts 16-char BLE Auth Key from nespresso.ab / SQLite DB

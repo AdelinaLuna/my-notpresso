@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.5.0';
+const APP_VERSION = '0.5.1';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -1684,16 +1684,12 @@ function renderLibrary() {
   state.savedRecipes.forEach((recipe, idx) => {
     const item = document.createElement('div');
     item.className = 'recipe-item';
+    item.dataset.idx = String(idx);
 
     const details = getRecipeDetailText(recipe, { includeTotal: true, compactSeq: true, fallbackIdx: idx });
-    const isFirst = idx === 0;
-    const isLast = idx === state.savedRecipes.length - 1;
 
     item.innerHTML = `
-      <div class="recipe-reorder-col">
-        <button class="btn-reorder btn-move-up" data-idx="${idx}" ${isFirst ? 'disabled' : ''} title="Move Up">▲</button>
-        <button class="btn-reorder btn-move-down" data-idx="${idx}" ${isLast ? 'disabled' : ''} title="Move Down">▼</button>
-      </div>
+      <div class="recipe-drag-handle" title="Hold and drag to reorder" aria-label="Hold and drag to reorder">⋮⋮</div>
       <div class="recipe-info-col">
         <div class="recipe-name-row">
           <span class="recipe-meta-name">${escapeHtml(recipe.name)}</span>
@@ -1711,24 +1707,9 @@ function renderLibrary() {
     el.libraryList.appendChild(item);
   });
 
-  // Per-cup temperature pills
+  // Per-cup temperature pills & long-press drag reordering
   bindRecipeTempPillListeners(el.libraryList);
-
-  // Reorder buttons
-  document.querySelectorAll('.btn-move-up').forEach(b => {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const idx = parseInt(e.currentTarget.dataset.idx, 10);
-      moveRecipe(idx, -1);
-    });
-  });
-  document.querySelectorAll('.btn-move-down').forEach(b => {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const idx = parseInt(e.currentTarget.dataset.idx, 10);
-      moveRecipe(idx, 1);
-    });
-  });
+  bindLongPressReorder(el.libraryList, '.recipe-item');
 
   // Rename buttons
   document.querySelectorAll('.btn-inline-rename').forEach(b => {
@@ -1783,6 +1764,7 @@ function renderFavoritesOnHome() {
   state.savedRecipes.forEach((recipe, idx) => {
     const card = document.createElement('div');
     card.className = 'home-favorite-card';
+    card.dataset.idx = String(idx);
 
     const totalMl = recipe.kind === 'bloom'
       ? (recipe.phase1Ml || 0) + (recipe.phase2Ml || 0)
@@ -1790,6 +1772,7 @@ function renderFavoritesOnHome() {
     const desc = getRecipeDetailText(recipe, { includeTotal: false, compactSeq: false, fallbackIdx: idx });
 
     card.innerHTML = `
+      <div class="recipe-drag-handle" title="Hold and drag to reorder" aria-label="Hold and drag to reorder">⋮⋮</div>
       <div class="home-fav-info">
         <div class="home-fav-top">
           <span class="home-fav-name">${escapeHtml(recipe.name)}</span>
@@ -1807,6 +1790,7 @@ function renderFavoritesOnHome() {
   });
 
   bindRecipeTempPillListeners(el.homeFavoritesList);
+  bindLongPressReorder(el.homeFavoritesList, '.home-favorite-card');
 
   document.querySelectorAll('.btn-home-fav-brew').forEach(b => {
     b.addEventListener('click', (e) => {
@@ -1822,16 +1806,132 @@ function renderFavoritesOnHome() {
   });
 }
 
-function moveRecipe(idx, delta) {
-  const targetIdx = idx + delta;
-  if (targetIdx < 0 || targetIdx >= state.savedRecipes.length) return;
-  const temp = state.savedRecipes[idx];
-  state.savedRecipes[idx] = state.savedRecipes[targetIdx];
-  state.savedRecipes[targetIdx] = temp;
+function moveRecipeFromTo(fromIdx, toIdx) {
+  if (
+    fromIdx === toIdx ||
+    fromIdx < 0 ||
+    toIdx < 0 ||
+    fromIdx >= state.savedRecipes.length ||
+    toIdx >= state.savedRecipes.length
+  ) {
+    return false;
+  }
+  const [moved] = state.savedRecipes.splice(fromIdx, 1);
+  state.savedRecipes.splice(toIdx, 0, moved);
   persistSavedRecipes();
   renderLibrary();
   renderFavoritesOnHome();
-  showToast(`Moved "${temp.name}" ${delta < 0 ? 'up' : 'down'}`);
+  showToast(`Moved "${moved.name}"`);
+  return true;
+}
+
+function bindLongPressReorder(container, itemSelector) {
+  if (!container || (container.dataset && container.dataset.dragBound === '1')) return;
+  if (container.dataset) container.dataset.dragBound = '1';
+
+  let dragSession = null;
+
+  const cleanup = (commit) => {
+    if (!dragSession) return;
+    clearTimeout(dragSession.timer);
+    const { card, fromIdx, active } = dragSession;
+    dragSession = null;
+
+    card.classList.remove('is-dragging');
+    container.classList.remove('is-reordering');
+
+    if (active) {
+      const ordered = Array.from(container.querySelectorAll(itemSelector));
+      const toIdx = ordered.indexOf(card);
+      if (commit && toIdx !== -1 && toIdx !== fromIdx) {
+        moveRecipeFromTo(fromIdx, toIdx);
+      } else {
+        renderLibrary();
+        renderFavoritesOnHome();
+      }
+    }
+  };
+
+  container.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target.closest('button, input, a, select, .recipe-temp-pill')) return;
+    const card = e.target.closest(itemSelector);
+    if (!card || !container.contains(card)) return;
+
+    const fromIdx = parseInt(card.dataset.idx, 10);
+    if (Number.isNaN(fromIdx)) return;
+
+    const onHandle = Boolean(e.target.closest('.recipe-drag-handle'));
+    dragSession = {
+      card,
+      fromIdx,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      active: false,
+      timer: setTimeout(() => {
+        if (!dragSession || dragSession.pointerId !== e.pointerId) return;
+        dragSession.active = true;
+        card.classList.add('is-dragging');
+        container.classList.add('is-reordering');
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(25);
+        }
+        try {
+          card.setPointerCapture?.(e.pointerId);
+        } catch (_) {}
+      }, onHandle ? 150 : 300)
+    };
+  });
+
+  container.addEventListener('pointermove', (e) => {
+    if (!dragSession || e.pointerId !== dragSession.pointerId) return;
+
+    if (!dragSession.active) {
+      if (Math.hypot(e.clientX - dragSession.startX, e.clientY - dragSession.startY) > 10) {
+        cleanup(false);
+      }
+      return;
+    }
+
+    if (typeof window !== 'undefined' && typeof window.scrollBy === 'function' && window.innerHeight) {
+      if (e.clientY < 70) window.scrollBy(0, -10);
+      else if (e.clientY > window.innerHeight - 70) window.scrollBy(0, 10);
+    }
+
+    const siblings = Array.from(container.querySelectorAll(itemSelector));
+    const nextSibling = siblings.find((sib) => {
+      if (sib === dragSession.card) return false;
+      const rect = sib.getBoundingClientRect();
+      return e.clientY < rect.top + rect.height / 2;
+    });
+
+    if (nextSibling) {
+      if (dragSession.card.nextElementSibling !== nextSibling) {
+        container.insertBefore(dragSession.card, nextSibling);
+      }
+    } else if (siblings[siblings.length - 1] !== dragSession.card) {
+      container.appendChild(dragSession.card);
+    }
+  });
+
+  container.addEventListener('touchmove', (e) => {
+    if (dragSession && dragSession.active) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  container.addEventListener('pointerup', (e) => {
+    if (dragSession && e.pointerId === dragSession.pointerId) cleanup(true);
+  });
+
+  container.addEventListener('pointercancel', (e) => {
+    if (dragSession && e.pointerId === dragSession.pointerId) cleanup(false);
+  });
+
+  container.addEventListener('contextmenu', (e) => {
+    if (dragSession && dragSession.active) e.preventDefault();
+  });
 }
 
 function openRenameModal(idx) {
