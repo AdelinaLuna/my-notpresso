@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.2';
+const APP_VERSION = '0.13.3';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -3156,6 +3156,36 @@ function formatPresetActionText(def, cfg) {
   return `${def.actionLabel} (${parts.join(' + ')} • ${getTempLabel(cfg.temp)})`;
 }
 
+function getPresetVolumeTag(kind, ml) {
+  const dial = state.machineDialVolumes || DIAL_PROFILE_FACTORY;
+  if (kind === 'coffee') {
+    if (ml === 15) return 'Min';
+    if (ml === 130) return 'Max';
+    if (dial[4] && dial[4] !== dial[0] && ml === dial[4]) return 'Americano';
+    if (ml === dial[0] || ml === 25) return 'Ristretto';
+    if (ml === dial[1] || ml === 40) return 'Espresso';
+    if (ml === dial[2] || ml === 110) return 'Lungo';
+    return '';
+  }
+  if (kind === 'water') {
+    if (ml === 25) return 'Min';
+    if (ml === 300) return 'Max';
+    if (dial[5] || ml === 125) {
+      if (ml === dial[5] || ml === 125) return 'Americano';
+    }
+    if (ml === 160) return 'XL';
+    if (ml === 250 || (dial[3] && dial[3] !== 200 && ml === dial[3])) return 'Hot Water';
+    if (ml === 200) return 'Dial';
+    return '';
+  }
+  return '';
+}
+
+function formatPresetVolumeLabel(kind, ml) {
+  const tag = getPresetVolumeTag(kind, ml);
+  return tag ? `(${tag}) ${ml} ml` : `${ml} ml`;
+}
+
 function syncPresetCardUI(card, drinkKey) {
   const def = PRESET_DRINK_DEFAULTS[drinkKey];
   const cfg = state.presetTweaks[drinkKey] || def;
@@ -3164,14 +3194,31 @@ function syncPresetCardUI(card, drinkKey) {
   const cSlider = card.querySelector('.preset-coffee-slider');
   const cVal = card.querySelector('.preset-coffee-val');
   if (cSlider) cSlider.value = cfg.coffeeMl;
-  if (cVal) cVal.textContent = `${cfg.coffeeMl} ml`;
+  if (cVal) cVal.textContent = formatPresetVolumeLabel('coffee', cfg.coffeeMl);
 
   const wSlider = card.querySelector('.preset-water-slider');
   const wVal = card.querySelector('.preset-water-val');
   if (wSlider) wSlider.value = cfg.waterMl;
-  if (wVal) wVal.textContent = `${cfg.waterMl} ml`;
+  if (wVal) wVal.textContent = formatPresetVolumeLabel('water', cfg.waterMl);
 
   if (isTwoStagePreset(def)) {
+    const iconEl = card.querySelector('.drink-icon');
+    if (iconEl) {
+      iconEl.textContent = cfg.seq === 'water-first' ? '💧☕' : '☕💧';
+    }
+    const volEl = card.querySelector('.drink-vol');
+    if (volEl) {
+      if (drinkKey === 'americano') {
+        volEl.textContent = cfg.seq === 'water-first'
+          ? `Rotary Dial Preset (${def.waterMl}ml + ${def.coffeeMl}ml)`
+          : `Rotary Dial Preset (${def.coffeeMl}ml + ${def.waterMl}ml)`;
+      } else {
+        const cDesc = `${cfg.coffeeMl}ml Coffee (${getTempLabel(cfg.coffeeTemp).replace('~', '')})`;
+        const wDesc = `${cfg.waterMl}ml Water (${getTempLabel(cfg.waterTemp).replace('~', '')})`;
+        volEl.textContent = cfg.seq === 'water-first' ? `${wDesc} → ${cDesc}` : `${cDesc} → ${wDesc}`;
+      }
+    }
+
     const stagesList = card.querySelector('.preset-stages-list');
     const coffeeStage = card.querySelector('.preset-stage-item[data-stage="coffee"]');
     const waterStage = card.querySelector('.preset-stage-item[data-stage="water"]');
@@ -3224,7 +3271,7 @@ function initPresetDrinkCards() {
             <div class="preset-stage-body">
               <div class="slider-header" style="margin-bottom:0;">
                 <span class="form-label"><span class="stage-order-badge" data-stage-badge="coffee">1st</span> ☕ Coffee Stage</span>
-                <span class="slider-badge preset-coffee-val">${cfg.coffeeMl} ml</span>
+                <span class="slider-badge preset-coffee-val">${formatPresetVolumeLabel('coffee', cfg.coffeeMl)}</span>
               </div>
               <input type="range" class="styled-slider preset-coffee-slider" min="15" max="130" step="5" value="${cfg.coffeeMl}">
               <div class="preset-temp-row">
@@ -3244,7 +3291,7 @@ function initPresetDrinkCards() {
             <div class="preset-stage-body">
               <div class="slider-header" style="margin-bottom:0;">
                 <span class="form-label"><span class="stage-order-badge" data-stage-badge="water">2nd</span> 💧 Water Stage</span>
-                <span class="slider-badge preset-water-val">${cfg.waterMl} ml</span>
+                <span class="slider-badge preset-water-val">${formatPresetVolumeLabel('water', cfg.waterMl)}</span>
               </div>
               <input type="range" class="styled-slider preset-water-slider" min="25" max="300" step="5" value="${cfg.waterMl}">
               <div class="preset-temp-row">
@@ -3294,7 +3341,7 @@ function initPresetDrinkCards() {
           <div class="preset-slider-row">
             <div class="slider-header" style="margin-bottom:4px;">
               <span class="form-label">☕ Coffee Volume</span>
-              <span class="slider-badge preset-coffee-val">${cfg.coffeeMl} ml</span>
+              <span class="slider-badge preset-coffee-val">${formatPresetVolumeLabel('coffee', cfg.coffeeMl)}</span>
             </div>
             <input type="range" class="styled-slider preset-coffee-slider" min="15" max="130" step="5" value="${cfg.coffeeMl}">
           </div>` : ''}
@@ -3302,7 +3349,7 @@ function initPresetDrinkCards() {
           <div class="preset-slider-row">
             <div class="slider-header" style="margin-bottom:4px;">
               <span class="form-label">💧 Water Volume</span>
-              <span class="slider-badge preset-water-val">${cfg.waterMl} ml</span>
+              <span class="slider-badge preset-water-val">${formatPresetVolumeLabel('water', cfg.waterMl)}</span>
             </div>
             <input type="range" class="styled-slider preset-water-slider" min="25" max="300" step="5" value="${cfg.waterMl}">
           </div>` : ''}

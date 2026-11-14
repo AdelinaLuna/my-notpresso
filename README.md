@@ -15,7 +15,11 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.13.2
+## 2. What's New in v0.5.0 – v0.13.3
+
+- **`v0.13.3` — Stage-Order Emoji Sync & Prefix Volume Badges**:
+  - Synchronized two-stage preset card emoji icons (`☕💧` for `Coffee → Water`, `💧☕` for `Water → Coffee`) and subtitles with the selected stage order.
+  - Displayed known drink/limit tags **in front of** the `ml` badge on Presets sliders (e.g., `(Lungo) 110 ml`, `(Espresso) 40 ml`, `(Americano) 125 ml`, `(Hot Water) 250 ml`) so right-edge alignment stays fixed.
 
 - **`v0.13.2` — Unified Two-Phase Cards, Dial-Synced Americano & Water-First XL**:
   - Unified **Great Americano XL** styling with `Americano` (removed `highlight-card` and `Split-Temp` badge, standardized on `Brew` actions) since both now support per-stage 3x temperatures and stage swapping.

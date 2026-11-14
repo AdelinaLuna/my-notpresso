@@ -312,6 +312,7 @@ function createAppHarness(options = {}) {
     (drink) => {
       const card = createMockElement('div', { class: 'drink-card', 'data-drink': drink });
       const mainRow = createMockElement('div', { class: 'drink-card-main' });
+      mainRow.appendChild(createMockElement('div', { class: 'drink-icon' }));
       mainRow.appendChild(createMockElement('div', { class: 'drink-vol' }));
       card.appendChild(mainRow);
       card.appendChild(createMockElement('button', { class: 'btn-preset-quick' }));
@@ -1119,6 +1120,13 @@ test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order sw
   const gxlCard = h.rootGroups.get('.drink-card[data-drink]').find(c => c.dataset.drink === 'great-americano');
   const amePanel = ameCard.querySelector('.drink-expand-panel');
   const gxlPanel = gxlCard.querySelector('.drink-expand-panel');
+  assert.equal(ameCard.querySelector('.drink-icon').textContent, '☕💧');
+  assert.equal(gxlCard.querySelector('.drink-icon').textContent, '💧☕');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 110), '(Lungo) 110 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 15), '(Min) 15 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 55), '55 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 125), '(Americano) 125 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 250), '(Hot Water) 250 ml');
   assert.equal(ameCard.querySelectorAll('.preset-coffee-temp-btn').length, 3);
   assert.equal(ameCard.querySelectorAll('.preset-water-temp-btn').length, 3);
   assert.equal(ameCard.querySelectorAll('.preset-temp-btn').length, 6);
@@ -1128,9 +1136,10 @@ test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order sw
   assert.equal(amePanel.innerHTML.includes('data-temp="split"'), false);
   assert.equal(gxlPanel.innerHTML.includes('data-temp="split"'), false);
 
-  // Swap Americano via its single swap button and confirm stage DOM, middle swap row, & badges flip
+  // Swap Americano via its single swap button and confirm stage DOM, icon order, middle swap row, & badges flip
   await ameCard.querySelector('.btn-preset-swap-stages').dispatchEvent('click');
   assert.equal(state.presetTweaks.americano.seq, 'water-first');
+  assert.equal(ameCard.querySelector('.drink-icon').textContent, '💧☕');
   const ameStageChildren = ameCard.querySelector('.preset-stages-list').children;
   assert.equal(ameStageChildren[1].classList.contains('stage-swap-row'), true);
   const orderedStages = ameCard.querySelectorAll('.preset-stage-item');
