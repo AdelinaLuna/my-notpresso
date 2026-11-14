@@ -234,99 +234,81 @@
           <h2 class="card-title" style="margin-bottom:0;">Craft Custom Recipe</h2>
           <button id="btnLoadGreatAmericano" class="btn-xs">⚡ Load Great Americano</button>
         </div>
-        <p class="card-desc" style="margin-top:4px;">Exact 1 ml control (`0` or `15–130 ml` Coffee + `0` or `25–300 ml` Water = up to `430 ml`), pour order, and Split-Temperature 2-stage brewing.</p>
+        <p class="card-desc" style="margin-top:4px;">Exact 1 ml control (<code>0</code> or <code>15–130 ml</code> Coffee + <code>0</code> or <code>25–300 ml</code> Water = up to <code>430 ml</code>). Hold and drag a stage to swap pour order, and pick each stage temperature independently.</p>
 
-        <!-- Pour Sequence Selection (IngredientSequence) -->
-        <div class="form-group">
-          <label class="form-label">Pour Order (`IngredientSequence`)</label>
-          <div class="temp-toggle-group compact" style="margin-top:6px;">
-            <button class="seq-btn-custom temp-btn-custom active" data-seq="coffee-first">☕ → 💧 Coffee First (Americano)</button>
-            <button class="seq-btn-custom temp-btn-custom" data-seq="water-first">💧 → ☕ Water First (Long Black)</button>
-          </div>
-        </div>
-
-        <!-- Split Temperature Mode Toggle -->
-        <div class="form-group">
-          <div class="slider-header">
-            <label class="form-label">Temperature Control</label>
-            <label class="toggle-pill">
-              <input type="checkbox" id="chkSplitTemp">
-              <span>🔥❄️ Split Temp (Coffee ≠ Water)</span>
-            </label>
-          </div>
-
-          <!-- Single Temp Selector -->
-          <div id="singleTempGroup" class="temp-toggle-group compact">
-            <button class="temp-btn-custom" data-temp="1">Warm ~80°C</button>
-            <button class="temp-btn-custom active" data-temp="0">Hot ~85°C</button>
-            <button class="temp-btn-custom" data-temp="2">Max ~90°C</button>
-          </div>
-
-          <!-- Split Temp Selectors (Hidden unless chkSplitTemp checked) -->
-          <div id="splitTempGroup" class="split-temp-box hidden">
-            <div class="split-temp-row">
-              <span class="split-temp-label">☕ Coffee Temp:</span>
-              <div class="temp-toggle-group compact" style="flex:1;">
-                <button class="temp-btn-coffee temp-btn-custom" data-temp="1">Warm 80°</button>
-                <button class="temp-btn-coffee temp-btn-custom" data-temp="0">Hot 85°</button>
-                <button class="temp-btn-coffee temp-btn-custom active" data-temp="2">Max 90°</button>
+        <!-- Draggable Two-Stage Custom Builder (#18) -->
+        <div id="customStagesList" class="preset-stages-list">
+          <!-- Stage Card: Coffee -->
+          <div id="customStageCoffee" class="preset-stage-item" data-stage="coffee">
+            <div class="recipe-drag-handle" title="Hold and drag to swap pour order" aria-label="Hold and drag to swap pour order">⋮⋮</div>
+            <div class="preset-stage-body">
+              <div class="slider-header" style="margin-bottom:0;">
+                <label class="form-label"><span id="badgeCustomCoffeeOrder" class="stage-order-badge">1st</span> ☕ Coffee Extraction (<code>0</code> or <code>15–130 ml</code>)</label>
+                <div class="stepper-wrap">
+                  <button type="button" class="btn-step" data-target="coffee" data-delta="-1">−</button>
+                  <span id="valCoffeeMl" class="slider-badge">40 ml</span>
+                  <button type="button" class="btn-step" data-target="coffee" data-delta="1">+</button>
+                </div>
+              </div>
+              <input type="range" id="sliderCoffeeMl" min="0" max="130" step="1" value="40" class="styled-slider">
+              <div class="quick-chips-row">
+                <button type="button" class="chip-btn" data-coffee="0">0ml</button>
+                <button type="button" class="chip-btn" data-coffee="15">15ml (Min)</button>
+                <button type="button" class="chip-btn" data-coffee="25">25ml (Ristretto)</button>
+                <button type="button" class="chip-btn" data-coffee="40">40ml (Espresso)</button>
+                <button type="button" class="chip-btn" data-coffee="110">110ml (Lungo)</button>
+                <button type="button" class="chip-btn" data-coffee="130">130ml (Max)</button>
+              </div>
+              <div class="temp-toggle-group compact">
+                <button type="button" class="temp-btn-coffee temp-btn-custom" data-temp="1">Warm ~80°C</button>
+                <button type="button" class="temp-btn-coffee temp-btn-custom" data-temp="0">Hot ~85°C</button>
+                <button type="button" class="temp-btn-coffee temp-btn-custom active" data-temp="2">Max ~90°C</button>
               </div>
             </div>
-            <div class="split-temp-row" style="margin-top:8px;">
-              <span class="split-temp-label">💧 Water Temp:</span>
-              <div class="temp-toggle-group compact" style="flex:1;">
-                <button class="temp-btn-water temp-btn-custom active" data-temp="1">Warm 80°</button>
-                <button class="temp-btn-water temp-btn-custom" data-temp="0">Hot 85°</button>
-                <button class="temp-btn-water temp-btn-custom" data-temp="2">Max 90°</button>
+          </div>
+
+          <!-- Stage Card: Water -->
+          <div id="customStageWater" class="preset-stage-item" data-stage="water">
+            <div class="recipe-drag-handle" title="Hold and drag to swap pour order" aria-label="Hold and drag to swap pour order">⋮⋮</div>
+            <div class="preset-stage-body">
+              <div class="slider-header" style="margin-bottom:0;">
+                <label class="form-label"><span id="badgeCustomWaterOrder" class="stage-order-badge">2nd</span> 💧 Hot Water Bypass (<code>0</code> or <code>25–300 ml</code>)</label>
+                <div class="stepper-wrap">
+                  <button type="button" class="btn-step" data-target="water" data-delta="-5">−</button>
+                  <span id="valWaterMl" class="slider-badge">160 ml</span>
+                  <button type="button" class="btn-step" data-target="water" data-delta="5">+</button>
+                </div>
+              </div>
+              <input type="range" id="sliderWaterMl" min="0" max="300" step="1" value="160" class="styled-slider">
+              <div class="quick-chips-row">
+                <button type="button" class="chip-btn" data-water="0">0ml</button>
+                <button type="button" class="chip-btn" data-water="25">25ml (Min)</button>
+                <button type="button" class="chip-btn" data-water="80">80ml</button>
+                <button type="button" class="chip-btn" data-water="125">125ml</button>
+                <button type="button" class="chip-btn" data-water="160">160ml (XL)</button>
+                <button type="button" class="chip-btn" data-water="200">200ml</button>
+                <button type="button" class="chip-btn" data-water="300">300ml (Max)</button>
+              </div>
+              <div class="temp-toggle-group compact">
+                <button type="button" class="temp-btn-water temp-btn-custom active" data-temp="1">Warm ~80°C</button>
+                <button type="button" class="temp-btn-water temp-btn-custom" data-temp="0">Hot ~85°C</button>
+                <button type="button" class="temp-btn-water temp-btn-custom" data-temp="2">Max ~90°C</button>
               </div>
             </div>
-            <small class="field-hint" style="margin-top:6px;">
-              <strong>How 2-Stage Split-Temp Works:</strong> Dispenses Stage 1 at its own temperature, waits for <code>06aa3a12</code> to return to <code>READY</code>, and immediately dispenses Stage 2 at the second temperature!
-            </small>
           </div>
         </div>
 
-        <!-- Coffee Volume Slider (ZeroOrRangeValue: 0 or 15..130 ml, step 1 ml) -->
-        <div class="form-group">
-          <div class="slider-header">
-            <label class="form-label">☕ Coffee Extraction (`0` or `15–130 ml`)</label>
-            <div class="stepper-wrap">
-              <button type="button" class="btn-step" data-target="coffee" data-delta="-1">−</button>
-              <span id="valCoffeeMl" class="slider-badge">40 ml</span>
-              <button type="button" class="btn-step" data-target="coffee" data-delta="1">+</button>
-            </div>
+        <!-- Hidden compatibility controls kept synced by syncCustomRecipeUI() -->
+        <div class="hidden" aria-hidden="true">
+          <button type="button" class="seq-btn-custom active" data-seq="coffee-first"></button>
+          <button type="button" class="seq-btn-custom" data-seq="water-first"></button>
+          <input type="checkbox" id="chkSplitTemp" checked>
+          <div id="singleTempGroup" class="hidden">
+            <button type="button" class="temp-btn-custom" data-temp="1"></button>
+            <button type="button" class="temp-btn-custom active" data-temp="0"></button>
+            <button type="button" class="temp-btn-custom" data-temp="2"></button>
           </div>
-          <input type="range" id="sliderCoffeeMl" min="0" max="130" step="1" value="40" class="styled-slider">
-          <div class="quick-chips-row">
-            <button type="button" class="chip-btn" data-coffee="0">0ml</button>
-            <button type="button" class="chip-btn" data-coffee="15">15ml (Min)</button>
-            <button type="button" class="chip-btn" data-coffee="25">25ml (Ristretto)</button>
-            <button type="button" class="chip-btn" data-coffee="40">40ml (Espresso)</button>
-            <button type="button" class="chip-btn" data-coffee="110">110ml (Lungo)</button>
-            <button type="button" class="chip-btn" data-coffee="130">130ml (Max)</button>
-          </div>
-        </div>
-
-        <!-- Hot Water Volume Slider (ZeroOrRangeValue: 0 or 25..300 ml, step 1 ml) -->
-        <div class="form-group">
-          <div class="slider-header">
-            <label class="form-label">💧 Hot Water Bypass (`0` or `25–300 ml`)</label>
-            <div class="stepper-wrap">
-              <button type="button" class="btn-step" data-target="water" data-delta="-5">−</button>
-              <span id="valWaterMl" class="slider-badge">160 ml</span>
-              <button type="button" class="btn-step" data-target="water" data-delta="5">+</button>
-            </div>
-          </div>
-          <input type="range" id="sliderWaterMl" min="0" max="300" step="1" value="160" class="styled-slider">
-          <div class="quick-chips-row">
-            <button type="button" class="chip-btn" data-water="0">0ml</button>
-            <button type="button" class="chip-btn" data-water="25">25ml (Min)</button>
-            <button type="button" class="chip-btn" data-water="80">80ml</button>
-            <button type="button" class="chip-btn" data-water="125">125ml</button>
-            <button type="button" class="chip-btn" data-water="160">160ml (XL)</button>
-            <button type="button" class="chip-btn" data-water="200">200ml</button>
-            <button type="button" class="chip-btn" data-water="300">300ml (Max)</button>
-          </div>
+          <div id="splitTempGroup"></div>
         </div>
 
         <!-- Recipe Summary Card -->

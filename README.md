@@ -15,7 +15,11 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.12.0
+## 2. What's New in v0.5.0 – v0.13.0
+
+- **`v0.13.0` — Two-Phase Per-Stage 3x Temperatures & Draggable Stage Order (`#18`)**:
+  - Removed the separate `"Split"` temperature button from two-phase preset cards (`Americano`, `Great Americano XL`) and the Custom Recipe builder in favour of **3x individual temperature selectors (`Warm ~80°C`, `Hot ~85°C`, `Max ~90°C`) on both Coffee and Water stages**.
+  - Added **long-press drag reordering (`⋮⋮`)** on Coffee/Water stage cards to swap what dispenses first (`Coffee → Water` vs `Water → Coffee`), automatically choosing single-stage vs two-stage split brewing based on whether the stage temperatures match.
 
 - **`v0.12.0` — 5-Second Logo Long-Press Cache Reset & Offline Cache-First SW**:
   - Kept [sw.js](sw.js) **Cache-First** for instant offline launches while registering with `{ updateViaCache: 'none' }`.

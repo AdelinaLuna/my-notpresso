@@ -1748,3 +1748,50 @@ body {
   border-radius: var(--radius-sm);
   background: #101216;
 }
+
+/* Two-Stage Draggable Stages & Individual Stage Temperatures (v0.13.0 / #18) */
+.preset-stages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.preset-stage-item {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  background: rgba(16, 18, 22, 0.55);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.preset-stage-item.is-dragging {
+  border-color: var(--accent-gold);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  transform: scale(0.99);
+  z-index: 5;
+}
+
+.preset-stage-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stage-order-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-gold);
+  background: rgba(200, 141, 75, 0.15);
+  border: 1px solid rgba(200, 141, 75, 0.35);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 4px;
+}

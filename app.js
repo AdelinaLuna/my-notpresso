@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.12.0';
+const APP_VERSION = '0.13.0';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -108,8 +108,8 @@ const PRESET_DRINK_DEFAULTS = {
   ristretto:         { name: 'Ristretto',          sizeCode: 0,    coffeeMl: 25,  waterMl: 0,   temp: 0,       splitTemp: false, actionLabel: 'Brew' },
   espresso:          { name: 'Espresso',           sizeCode: 1,    coffeeMl: 40,  waterMl: 0,   temp: 0,       splitTemp: false, actionLabel: 'Brew' },
   lungo:             { name: 'Lungo',              sizeCode: 2,    coffeeMl: 110, waterMl: 0,   temp: 0,       splitTemp: false, actionLabel: 'Brew' },
-  americano:         { name: 'Americano',          sizeCode: 5,    coffeeMl: 25,  waterMl: 125, temp: 0,       splitTemp: false, actionLabel: 'Brew' },
-  'great-americano': { name: 'Great Americano XL', sizeCode: null, coffeeMl: 40,  waterMl: 160, temp: 'split', splitTemp: true,  coffeeTemp: 2, waterTemp: 1, actionLabel: '2-Stage' }
+  americano:         { name: 'Americano',          sizeCode: 5,    coffeeMl: 25,  waterMl: 125, temp: 0, coffeeTemp: 0, waterTemp: 0, seq: 'coffee-first', splitTemp: false, actionLabel: 'Brew' },
+  'great-americano': { name: 'Great Americano XL', sizeCode: null, coffeeMl: 40,  waterMl: 160, temp: 2, coffeeTemp: 2, waterTemp: 1, seq: 'coffee-first', splitTemp: true,  actionLabel: '2-Stage' }
 };
 
 // 2. Application State
@@ -127,9 +127,9 @@ const state = {
 
   // Custom Recipe Builder state
   customTemp: 0,
-  customSplitTemp: false,
-  customCoffeeTemp: 2, // Default Max 90°C for Split-Temp
-  customWaterTemp: 1,  // Default Warm 80°C for Split-Temp
+  customSplitTemp: true,
+  customCoffeeTemp: 2, // Default Max 90°C for Coffee stage
+  customWaterTemp: 1,  // Default Warm 80°C for Water stage
   customSequence: 'coffee-first',
   customCoffeeMl: 40,
   customWaterMl: 160,
@@ -214,6 +214,11 @@ const el = {
 
   // Tab 2: Custom Recipe & Split-Temp
   btnLoadGreatAmericano: document.getElementById('btnLoadGreatAmericano'),
+  customStagesList: document.getElementById('customStagesList'),
+  customStageCoffee: document.getElementById('customStageCoffee'),
+  customStageWater: document.getElementById('customStageWater'),
+  badgeCustomCoffeeOrder: document.getElementById('badgeCustomCoffeeOrder'),
+  badgeCustomWaterOrder: document.getElementById('badgeCustomWaterOrder'),
   seqButtonsCustom: document.querySelectorAll('.seq-btn-custom'),
   chkSplitTemp: document.getElementById('chkSplitTemp'),
   singleTempGroup: document.getElementById('singleTempGroup'),
@@ -1184,15 +1189,17 @@ async function brewCustomRecipe(coffeeMl, waterMl, options = {}) {
   }
 
   const sequence = options.seq || state.customSequence || 'coffee-first';
-  const splitTemp = options.splitTemp !== undefined ? options.splitTemp : state.customSplitTemp;
   const singleTemp = options.temp !== undefined ? options.temp : state.customTemp;
   const coffeeTemp = options.coffeeTemp !== undefined ? options.coffeeTemp : state.customCoffeeTemp;
   const waterTemp = options.waterTemp !== undefined ? options.waterTemp : state.customWaterTemp;
+  const splitTemp = options.splitTemp !== undefined ? options.splitTemp : (coffeeTemp !== waterTemp);
 
   // If only 1 ingredient is > 0 or both temperatures are identical, run native 1-command recipe:
   if (!splitTemp || coffeeMl === 0 || waterMl === 0 || coffeeTemp === waterTemp) {
     state.activeWorkflow = null;
-    const effectiveTemp = coffeeMl === 0 ? waterTemp : (splitTemp ? coffeeTemp : singleTemp);
+    const effectiveTemp = coffeeMl === 0
+      ? waterTemp
+      : (options.splitTemp === false && options.temp !== undefined ? singleTemp : coffeeTemp);
     try {
       await sendSingleStageCustomBrew(coffeeMl, waterMl, effectiveTemp, sequence);
     } catch (err) {
@@ -1973,7 +1980,8 @@ function updateCustomRecipeSummary() {
   }
   el.valRatio.textContent = profile;
 
-  const isSplit = state.customSplitTemp && coffee > 0 && water > 0 && state.customCoffeeTemp !== state.customWaterTemp;
+  const isSplit = coffee > 0 && water > 0 && state.customCoffeeTemp !== state.customWaterTemp;
+  state.customSplitTemp = isSplit;
   el.btnBrewCustomLabel.textContent = isSplit
     ? `Start 2-Stage Split-Temp (${total} ml)`
     : `Start Custom Extraction (${total} ml)`;
@@ -2215,7 +2223,42 @@ function moveRecipeFromTo(fromIdx, toIdx) {
   return true;
 }
 
-function bindLongPressReorder(container, itemSelector) {
+function orderTwoStageElements(listEl, coffeeEl, waterEl, coffeeBadgeEl, waterBadgeEl, seq) {
+  const waterFirst = seq === 'water-first';
+  if (listEl && coffeeEl && waterEl) {
+    const first = waterFirst ? waterEl : coffeeEl;
+    const second = waterFirst ? coffeeEl : waterEl;
+    if (listEl.firstElementChild !== first) {
+      listEl.insertBefore(first, listEl.firstElementChild);
+    }
+    listEl.insertBefore(second, null);
+  }
+  if (coffeeBadgeEl) coffeeBadgeEl.textContent = waterFirst ? '2nd' : '1st';
+  if (waterBadgeEl) waterBadgeEl.textContent = waterFirst ? '1st' : '2nd';
+}
+
+function setCustomStageOrder(seq) {
+  state.customSequence = seq === 'water-first' ? 'water-first' : 'coffee-first';
+  syncCustomRecipeUI();
+}
+
+function setPresetStageOrder(drinkKey, seq) {
+  if (!state.presetTweaks[drinkKey]) resetPresetTweak(drinkKey);
+  state.presetTweaks[drinkKey].seq = seq === 'water-first' ? 'water-first' : 'coffee-first';
+  const card = Array.from(el.presetDrinkCards || []).find(c => c.dataset && c.dataset.drink === drinkKey);
+  if (card) syncPresetCardUI(card, drinkKey);
+}
+
+function bindStageListDrag(container, onOrderChange) {
+  bindLongPressReorder(container, '.preset-stage-item', {
+    onCommit: ({ ordered }) => {
+      const topStage = ordered[0] && ordered[0].dataset && ordered[0].dataset.stage;
+      onOrderChange(topStage === 'water' ? 'water-first' : 'coffee-first');
+    }
+  });
+}
+
+function bindLongPressReorder(container, itemSelector, options = {}) {
   if (!container || (container.dataset && container.dataset.dragBound === '1')) return;
   if (container.dataset) container.dataset.dragBound = '1';
 
@@ -2233,7 +2276,9 @@ function bindLongPressReorder(container, itemSelector) {
     if (active) {
       const ordered = Array.from(container.querySelectorAll(itemSelector));
       const toIdx = ordered.indexOf(card);
-      if (commit && toIdx !== -1 && toIdx !== fromIdx) {
+      if (options.onCommit) {
+        if (commit) options.onCommit({ card, fromIdx, toIdx, ordered });
+      } else if (commit && toIdx !== -1 && toIdx !== fromIdx) {
         moveRecipeFromTo(fromIdx, toIdx);
       } else {
         renderLibrary();
@@ -2248,8 +2293,10 @@ function bindLongPressReorder(container, itemSelector) {
     const card = e.target.closest(itemSelector);
     if (!card || !container.contains(card)) return;
 
-    const fromIdx = parseInt(card.dataset.idx, 10);
-    if (Number.isNaN(fromIdx)) return;
+    const fromIdx = options.onCommit
+      ? Array.from(container.querySelectorAll(itemSelector)).indexOf(card)
+      : parseInt(card.dataset.idx, 10);
+    if (Number.isNaN(fromIdx) || fromIdx < 0) return;
 
     const onHandle = Boolean(e.target.closest('.recipe-drag-handle'));
     dragSession = {
@@ -2363,13 +2410,23 @@ function switchTab(tabId) {
 function syncCustomRecipeUI() {
   el.sliderCoffeeMl.value = state.customCoffeeMl;
   el.sliderWaterMl.value = state.customWaterMl;
-  el.seqButtonsCustom.forEach(b => b.classList.toggle('active', b.dataset.seq === state.customSequence));
-  el.chkSplitTemp.checked = state.customSplitTemp;
-  el.singleTempGroup.classList.toggle('hidden', state.customSplitTemp);
-  el.splitTempGroup.classList.toggle('hidden', !state.customSplitTemp);
-  el.tempButtonsCustom.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customTemp));
-  el.tempButtonsCoffee.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customCoffeeTemp));
-  el.tempButtonsWater.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customWaterTemp));
+  state.customSplitTemp = state.customCoffeeMl > 0 && state.customWaterMl > 0 && state.customCoffeeTemp !== state.customWaterTemp;
+  state.customTemp = state.customCoffeeTemp;
+  orderTwoStageElements(
+    el.customStagesList,
+    el.customStageCoffee,
+    el.customStageWater,
+    el.badgeCustomCoffeeOrder,
+    el.badgeCustomWaterOrder,
+    state.customSequence
+  );
+  if (el.seqButtonsCustom) el.seqButtonsCustom.forEach(b => b.classList.toggle('active', b.dataset.seq === state.customSequence));
+  if (el.chkSplitTemp) el.chkSplitTemp.checked = state.customSplitTemp;
+  if (el.singleTempGroup) el.singleTempGroup.classList.toggle('hidden', state.customSplitTemp);
+  if (el.splitTempGroup) el.splitTempGroup.classList.toggle('hidden', !state.customSplitTemp);
+  if (el.tempButtonsCustom) el.tempButtonsCustom.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customTemp));
+  if (el.tempButtonsCoffee) el.tempButtonsCoffee.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customCoffeeTemp));
+  if (el.tempButtonsWater) el.tempButtonsWater.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customWaterTemp));
   updateCustomRecipeSummary();
 }
 
@@ -2421,7 +2478,9 @@ function editRecipeInCustomTab(idx) {
 
 function saveCurrentCustomRecipe() {
   const inputName = el.inputCustomRecipeName ? el.inputCustomRecipeName.value.trim() : '';
-  const defaultName = state.customSplitTemp
+  const isSplit = state.customCoffeeMl > 0 && state.customWaterMl > 0 && state.customCoffeeTemp !== state.customWaterTemp;
+  state.customSplitTemp = isSplit;
+  const defaultName = isSplit
     ? 'Split-Temp Americano'
     : (state.customCoffeeMl === 0 ? 'Hot Water Dispense' : `${state.customCoffeeMl}ml Coffee Recipe`);
   const name = inputName || defaultName;
@@ -2432,10 +2491,10 @@ function saveCurrentCustomRecipe() {
     kind: 'custom',
     coffeeMl: state.customCoffeeMl,
     waterMl: state.customWaterMl,
-    splitTemp: state.customSplitTemp,
+    splitTemp: isSplit,
     coffeeTemp: state.customCoffeeTemp,
     waterTemp: state.customWaterTemp,
-    temp: state.customTemp,
+    temp: state.customCoffeeMl === 0 ? state.customWaterTemp : state.customCoffeeTemp,
     seq: state.customSequence
   };
 
@@ -2462,12 +2521,14 @@ function updateCurrentCustomRecipe() {
   const inputName = el.inputCustomRecipeName ? el.inputCustomRecipeName.value.trim() : '';
   const existing = state.savedRecipes[idx];
   existing.name = inputName || existing.name;
+  const isSplit = state.customCoffeeMl > 0 && state.customWaterMl > 0 && state.customCoffeeTemp !== state.customWaterTemp;
+  state.customSplitTemp = isSplit;
   existing.coffeeMl = state.customCoffeeMl;
   existing.waterMl = state.customWaterMl;
-  existing.splitTemp = state.customSplitTemp;
+  existing.splitTemp = isSplit;
   existing.coffeeTemp = state.customCoffeeTemp;
   existing.waterTemp = state.customWaterTemp;
-  existing.temp = state.customTemp;
+  existing.temp = state.customCoffeeMl === 0 ? state.customWaterTemp : state.customCoffeeTemp;
   existing.seq = state.customSequence;
   delete state.recipeTempOverrides[getRecipeTempKey(existing, idx)];
 
@@ -2985,32 +3046,39 @@ function resetPresetTweak(drinkKey) {
   state.presetTweaks[drinkKey] = JSON.parse(JSON.stringify(def));
 }
 
+function isTwoStagePreset(def) {
+  return Boolean(def && def.coffeeMl > 0 && def.waterMl > 0);
+}
+
+function getShortTempLabel(code) {
+  return code === 1 ? '80°C' : (code === 2 ? '90°C' : '85°C');
+}
+
 function executePresetDrink(drinkKey, useTweaks = false) {
   const def = PRESET_DRINK_DEFAULTS[drinkKey];
   if (!def) return;
   const cfg = useTweaks ? (state.presetTweaks[drinkKey] || def) : def;
-  if (cfg.temp === 0 || cfg.temp === 1 || cfg.temp === 2) {
-    state.selectedTemp = cfg.temp;
-  }
 
-  if (drinkKey === 'great-americano') {
-    if (cfg.temp === 'split') {
-      return brewCustomRecipe(cfg.coffeeMl, cfg.waterMl, {
-        seq: 'coffee-first',
-        splitTemp: true,
-        coffeeTemp: 2,
-        waterTemp: 1
-      });
+  if (isTwoStagePreset(def)) {
+    const seq = cfg.seq || def.seq || 'coffee-first';
+    const coffeeTemp = cfg.coffeeTemp !== undefined ? cfg.coffeeTemp : (cfg.temp !== undefined ? cfg.temp : 0);
+    const waterTemp = cfg.waterTemp !== undefined ? cfg.waterTemp : (cfg.temp !== undefined ? cfg.temp : 0);
+    state.selectedTemp = coffeeTemp;
+    if (!useTweaks && def.sizeCode !== null) {
+      return brewPreset(def.name, def.sizeCode, coffeeTemp);
     }
     return brewCustomRecipe(cfg.coffeeMl, cfg.waterMl, {
-      seq: 'coffee-first',
-      splitTemp: false,
-      temp: cfg.temp,
-      coffeeTemp: cfg.temp,
-      waterTemp: cfg.temp
+      seq,
+      splitTemp: coffeeTemp !== waterTemp,
+      temp: coffeeTemp,
+      coffeeTemp,
+      waterTemp
     });
   }
 
+  if (cfg.temp === 0 || cfg.temp === 1 || cfg.temp === 2) {
+    state.selectedTemp = cfg.temp;
+  }
   const volChanged = useTweaks && (cfg.coffeeMl !== def.coffeeMl || cfg.waterMl !== def.waterMl);
   if (!volChanged) {
     return brewPreset(def.name, def.sizeCode, cfg.temp);
@@ -3025,11 +3093,18 @@ function executePresetDrink(drinkKey, useTweaks = false) {
 }
 
 function formatPresetActionText(def, cfg) {
+  if (isTwoStagePreset(def)) {
+    const cTemp = cfg.coffeeTemp !== undefined ? cfg.coffeeTemp : 0;
+    const wTemp = cfg.waterTemp !== undefined ? cfg.waterTemp : 0;
+    const cPart = `${cfg.coffeeMl}ml☕ ${getShortTempLabel(cTemp)}`;
+    const wPart = `${cfg.waterMl}ml💧 ${getShortTempLabel(wTemp)}`;
+    const ordered = cfg.seq === 'water-first' ? `${wPart} → ${cPart}` : `${cPart} → ${wPart}`;
+    return `${def.actionLabel} (${ordered})`;
+  }
   const parts = [];
   if (def.coffeeMl > 0) parts.push(`${cfg.coffeeMl}ml`);
   if (def.waterMl > 0) parts.push(`${cfg.waterMl}ml`);
-  const tempText = cfg.temp === 'split' ? 'Split 90°→80°' : getTempLabel(cfg.temp);
-  return `${def.actionLabel} (${parts.join(' + ')} • ${tempText})`;
+  return `${def.actionLabel} (${parts.join(' + ')} • ${getTempLabel(cfg.temp)})`;
 }
 
 function syncPresetCardUI(card, drinkKey) {
@@ -3047,13 +3122,36 @@ function syncPresetCardUI(card, drinkKey) {
   if (wSlider) wSlider.value = cfg.waterMl;
   if (wVal) wVal.textContent = `${cfg.waterMl} ml`;
 
-  card.querySelectorAll('.preset-temp-btn').forEach(btn => {
-    const mode = btn.dataset.temp === 'split' ? 'split' : parseInt(btn.dataset.temp, 10);
-    btn.classList.toggle('active', cfg.temp === mode);
-  });
+  if (isTwoStagePreset(def)) {
+    const stagesList = card.querySelector('.preset-stages-list');
+    const coffeeStage = card.querySelector('.preset-stage-item[data-stage="coffee"]');
+    const waterStage = card.querySelector('.preset-stage-item[data-stage="water"]');
+    const cBadge = card.querySelector('[data-stage-badge="coffee"]');
+    const wBadge = card.querySelector('[data-stage-badge="water"]');
+    orderTwoStageElements(stagesList, coffeeStage, waterStage, cBadge, wBadge, cfg.seq || 'coffee-first');
+
+    card.querySelectorAll('.preset-coffee-temp-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.temp, 10) === cfg.coffeeTemp);
+    });
+    card.querySelectorAll('.preset-water-temp-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.temp, 10) === cfg.waterTemp);
+    });
+  } else {
+    card.querySelectorAll('.preset-temp-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.temp, 10) === cfg.temp);
+    });
+  }
 
   const brewBtn = card.querySelector('.btn-preset-brew-tweaked');
   if (brewBtn) brewBtn.textContent = formatPresetActionText(def, cfg);
+}
+
+function renderStageTempButtonsHtml(btnClass, selectedTemp) {
+  return [
+    { mode: 1, label: 'Warm ~80°C' },
+    { mode: 0, label: 'Hot ~85°C' },
+    { mode: 2, label: 'Max ~90°C' }
+  ].map(t => `<button type="button" class="${btnClass}${selectedTemp === t.mode ? ' active' : ''}" data-temp="${t.mode}">${t.label}</button>`).join('');
 }
 
 function initPresetDrinkCards() {
@@ -3070,43 +3168,105 @@ function initPresetDrinkCards() {
 
     if (panel) {
       const cfg = state.presetTweaks[drinkKey];
-      const tempButtonsHtml = [
-        { mode: 1, label: 'Warm ~80°C' },
-        { mode: 0, label: 'Hot ~85°C' },
-        { mode: 2, label: 'Max ~90°C' }
-      ];
-      if (def.splitTemp) {
-        tempButtonsHtml.push({ mode: 'split', label: 'Split 90°→80°' });
+      if (isTwoStagePreset(def)) {
+        const cStageHtml = `
+          <div class="preset-stage-item" data-stage="coffee">
+            <div class="recipe-drag-handle" title="Hold and drag to swap pour order" aria-label="Hold and drag to swap pour order">⋮⋮</div>
+            <div class="preset-stage-body">
+              <div class="slider-header" style="margin-bottom:0;">
+                <span class="form-label"><span class="stage-order-badge" data-stage-badge="coffee">1st</span> ☕ Coffee Stage</span>
+                <span class="slider-badge preset-coffee-val">${cfg.coffeeMl} ml</span>
+              </div>
+              <input type="range" class="styled-slider preset-coffee-slider" min="15" max="130" step="5" value="${cfg.coffeeMl}">
+              <div class="temp-toggle-group compact">
+                ${renderStageTempButtonsHtml('preset-coffee-temp-btn', cfg.coffeeTemp)}
+              </div>
+            </div>
+          </div>`;
+        const wStageHtml = `
+          <div class="preset-stage-item" data-stage="water">
+            <div class="recipe-drag-handle" title="Hold and drag to swap pour order" aria-label="Hold and drag to swap pour order">⋮⋮</div>
+            <div class="preset-stage-body">
+              <div class="slider-header" style="margin-bottom:0;">
+                <span class="form-label"><span class="stage-order-badge" data-stage-badge="water">2nd</span> 💧 Water Stage</span>
+                <span class="slider-badge preset-water-val">${cfg.waterMl} ml</span>
+              </div>
+              <input type="range" class="styled-slider preset-water-slider" min="25" max="300" step="5" value="${cfg.waterMl}">
+              <div class="temp-toggle-group compact">
+                ${renderStageTempButtonsHtml('preset-water-temp-btn', cfg.waterTemp)}
+              </div>
+            </div>
+          </div>`;
+
+        panel.innerHTML = `
+          <div class="preset-stages-list">${cfg.seq === 'water-first' ? (wStageHtml + cStageHtml) : (cStageHtml + wStageHtml)}</div>
+          <small class="field-hint">Hold &amp; drag <code>⋮⋮</code> on either stage to swap Coffee vs Water first. Distinct temps auto-run 2 stages.</small>
+          <div class="drink-expand-actions">
+            <button type="button" class="btn-sm btn-preset-reset">Reset Default</button>
+            <button type="button" class="btn btn-connect btn-preset-brew-tweaked" style="padding:7px 14px; font-size:12px;">${formatPresetActionText(def, cfg)}</button>
+          </div>`;
+
+        const stagesList = panel.querySelector('.preset-stages-list');
+        if (stagesList) {
+          bindStageListDrag(stagesList, (seq) => setPresetStageOrder(drinkKey, seq));
+        }
+
+        panel.querySelectorAll('.preset-coffee-temp-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            state.presetTweaks[drinkKey].coffeeTemp = parseInt(btn.dataset.temp, 10);
+            syncPresetCardUI(card, drinkKey);
+          });
+        });
+
+        panel.querySelectorAll('.preset-water-temp-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            state.presetTweaks[drinkKey].waterTemp = parseInt(btn.dataset.temp, 10);
+            syncPresetCardUI(card, drinkKey);
+          });
+        });
+      } else {
+        panel.innerHTML = `
+          ${def.coffeeMl > 0 ? `
+          <div class="preset-slider-row">
+            <div class="slider-header" style="margin-bottom:4px;">
+              <span class="form-label">☕ Coffee Volume</span>
+              <span class="slider-badge preset-coffee-val">${cfg.coffeeMl} ml</span>
+            </div>
+            <input type="range" class="styled-slider preset-coffee-slider" min="15" max="130" step="5" value="${cfg.coffeeMl}">
+          </div>` : ''}
+          ${def.waterMl > 0 ? `
+          <div class="preset-slider-row">
+            <div class="slider-header" style="margin-bottom:4px;">
+              <span class="form-label">💧 Water Volume</span>
+              <span class="slider-badge preset-water-val">${cfg.waterMl} ml</span>
+            </div>
+            <input type="range" class="styled-slider preset-water-slider" min="25" max="300" step="5" value="${cfg.waterMl}">
+          </div>` : ''}
+          <div class="preset-temp-row">
+            <span class="form-label" style="display:block; margin-bottom:6px;">Brew Temperature</span>
+            <div class="temp-toggle-group compact">
+              ${renderStageTempButtonsHtml('preset-temp-btn', cfg.temp)}
+            </div>
+          </div>
+          <div class="drink-expand-actions">
+            <button type="button" class="btn-sm btn-preset-reset">Reset Default</button>
+            <button type="button" class="btn btn-connect btn-preset-brew-tweaked" style="padding:7px 14px; font-size:12px;">${formatPresetActionText(def, cfg)}</button>
+          </div>`;
+
+        panel.querySelectorAll('.preset-temp-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const mode = parseInt(btn.dataset.temp, 10);
+            state.presetTweaks[drinkKey].temp = mode;
+            state.selectedTemp = mode;
+            syncPresetCardUI(card, drinkKey);
+          });
+        });
       }
 
-      panel.innerHTML = `
-        ${def.coffeeMl > 0 ? `
-        <div class="preset-slider-row">
-          <div class="slider-header" style="margin-bottom:4px;">
-            <span class="form-label">☕ Coffee Volume</span>
-            <span class="slider-badge preset-coffee-val">${cfg.coffeeMl} ml</span>
-          </div>
-          <input type="range" class="styled-slider preset-coffee-slider" min="15" max="130" step="5" value="${cfg.coffeeMl}">
-        </div>` : ''}
-        ${def.waterMl > 0 ? `
-        <div class="preset-slider-row">
-          <div class="slider-header" style="margin-bottom:4px;">
-            <span class="form-label">💧 Water Volume</span>
-            <span class="slider-badge preset-water-val">${cfg.waterMl} ml</span>
-          </div>
-          <input type="range" class="styled-slider preset-water-slider" min="25" max="300" step="5" value="${cfg.waterMl}">
-        </div>` : ''}
-        <div class="preset-temp-row">
-          <span class="form-label" style="display:block; margin-bottom:6px;">Brew Temperature</span>
-          <div class="temp-toggle-group compact">
-            ${tempButtonsHtml.map(t => `<button type="button" class="preset-temp-btn${cfg.temp === t.mode ? ' active' : ''}" data-temp="${t.mode}">${t.label}</button>`).join('')}
-          </div>
-        </div>
-        <div class="drink-expand-actions">
-          <button type="button" class="btn-sm btn-preset-reset">Reset Default</button>
-          <button type="button" class="btn btn-connect btn-preset-brew-tweaked" style="padding:7px 14px; font-size:12px;">${formatPresetActionText(def, cfg)}</button>
-        </div>
-      `;
+      syncPresetCardUI(card, drinkKey);
 
       const cSlider = panel.querySelector('.preset-coffee-slider');
       if (cSlider) {
@@ -3123,16 +3283,6 @@ function initPresetDrinkCards() {
           syncPresetCardUI(card, drinkKey);
         });
       }
-
-      panel.querySelectorAll('.preset-temp-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const mode = btn.dataset.temp === 'split' ? 'split' : parseInt(btn.dataset.temp, 10);
-          state.presetTweaks[drinkKey].temp = mode;
-          if (mode === 0 || mode === 1 || mode === 2) state.selectedTemp = mode;
-          syncPresetCardUI(card, drinkKey);
-        });
-      });
 
       const resetBtn = panel.querySelector('.btn-preset-reset');
       if (resetBtn) {
@@ -3199,31 +3349,21 @@ function initListeners() {
   el.btnReadSchedule.addEventListener('click', readScheduledBrew);
   el.btnCancelSchedule.addEventListener('click', emergencyStop);
 
-  // Tab 2: Custom Recipe & Split-Temp Builder
+  // Tab 2: Custom Recipe & Two-Phase Stage Builder
+  bindStageListDrag(el.customStagesList, setCustomStageOrder);
+
   el.btnLoadGreatAmericano.addEventListener('click', () => {
-    el.sliderCoffeeMl.value = 40;
-    el.sliderWaterMl.value = 160;
-    state.customSequence = 'coffee-first';
-    el.seqButtonsCustom.forEach(b => b.classList.toggle('active', b.dataset.seq === 'coffee-first'));
-    el.chkSplitTemp.checked = true;
-    state.customSplitTemp = true;
-    el.singleTempGroup.classList.add('hidden');
-    el.splitTempGroup.classList.remove('hidden');
+    state.customCoffeeMl = 40;
+    state.customWaterMl = 160;
     state.customCoffeeTemp = 2;
     state.customWaterTemp = 1;
-    el.tempButtonsCoffee.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === 2));
-    el.tempButtonsWater.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === 1));
-    updateCustomRecipeSummary();
+    state.customSplitTemp = true;
+    setCustomStageOrder('coffee-first');
     showToast('Loaded Great Americano (40ml @ Max + 160ml @ Warm)');
   });
 
   el.seqButtonsCustom.forEach(btn => {
-    btn.addEventListener('click', () => {
-      el.seqButtonsCustom.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.customSequence = btn.dataset.seq;
-      updateCustomRecipeSummary();
-    });
+    btn.addEventListener('click', () => setCustomStageOrder(btn.dataset.seq));
   });
 
   el.chkSplitTemp.addEventListener('change', () => {
@@ -3243,19 +3383,15 @@ function initListeners() {
 
   el.tempButtonsCoffee.forEach(btn => {
     btn.addEventListener('click', () => {
-      el.tempButtonsCoffee.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
       state.customCoffeeTemp = parseInt(btn.dataset.temp, 10);
-      updateCustomRecipeSummary();
+      syncCustomRecipeUI();
     });
   });
 
   el.tempButtonsWater.forEach(btn => {
     btn.addEventListener('click', () => {
-      el.tempButtonsWater.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
       state.customWaterTemp = parseInt(btn.dataset.temp, 10);
-      updateCustomRecipeSummary();
+      syncCustomRecipeUI();
     });
   });
 
@@ -3614,7 +3750,7 @@ window.addEventListener('DOMContentLoaded', () => {
   loadSavedRecipes();
   renderLibrary();
   renderFavoritesOnHome();
-  updateCustomRecipeSummary();
+  syncCustomRecipeUI();
   applyDialProfile(DIAL_PROFILE_APP, el.btnProfileAppCalibration);
   updateDescaleGuideUI();
   registerServiceWorker();

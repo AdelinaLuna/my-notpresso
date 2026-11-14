@@ -104,19 +104,43 @@ function createMockElement(tagName = 'div', attrs = {}) {
       if (val === '') {
         this.children = [];
       } else {
-        // Hydrate preset panel sliders/buttons when initPresetDrinkCards sets panel.innerHTML
-        const extra = [];
-        for (const cls of ['preset-coffee-slider', 'preset-coffee-val', 'preset-water-slider', 'preset-water-val', 'btn-preset-brew-tweaked', 'btn-preset-reset']) {
-          if (this._innerHTML.includes(cls)) extra.push(createMockElement('div', { class: cls }));
+        this.children = [];
+        if (this._innerHTML.includes('preset-stages-list')) {
+          const stagesList = createMockElement('div', { class: 'preset-stages-list' });
+          const cStage = createMockElement('div', { class: 'preset-stage-item', 'data-stage': 'coffee' });
+          cStage.appendChild(createMockElement('span', { class: 'stage-order-badge', 'data-stage-badge': 'coffee', textContent: '1st' }));
+          cStage.appendChild(createMockElement('input', { class: 'preset-coffee-slider' }));
+          cStage.appendChild(createMockElement('span', { class: 'preset-coffee-val' }));
+          ['1', '0', '2'].forEach(t => cStage.appendChild(createMockElement('button', { class: 'preset-coffee-temp-btn', 'data-temp': t })));
+
+          const wStage = createMockElement('div', { class: 'preset-stage-item', 'data-stage': 'water' });
+          wStage.appendChild(createMockElement('span', { class: 'stage-order-badge', 'data-stage-badge': 'water', textContent: '2nd' }));
+          wStage.appendChild(createMockElement('input', { class: 'preset-water-slider' }));
+          wStage.appendChild(createMockElement('span', { class: 'preset-water-val' }));
+          ['1', '0', '2'].forEach(t => wStage.appendChild(createMockElement('button', { class: 'preset-water-temp-btn', 'data-temp': t })));
+
+          const wIdx = this._innerHTML.indexOf('data-stage="water"');
+          const cIdx = this._innerHTML.indexOf('data-stage="coffee"');
+          if (wIdx !== -1 && cIdx !== -1 && wIdx < cIdx) {
+            stagesList.appendChild(wStage);
+            stagesList.appendChild(cStage);
+          } else {
+            stagesList.appendChild(cStage);
+            stagesList.appendChild(wStage);
+          }
+          this.appendChild(stagesList);
+        } else {
+          for (const cls of ['preset-coffee-slider', 'preset-coffee-val', 'preset-water-slider', 'preset-water-val']) {
+            if (this._innerHTML.includes(cls)) this.appendChild(createMockElement('div', { class: cls }));
+          }
+          const tempBtnRe = /class="[^"]*preset-temp-btn[^"]*"[^>]*data-temp="([^"]*)"/g;
+          let tm;
+          while ((tm = tempBtnRe.exec(this._innerHTML)) !== null) {
+            this.appendChild(createMockElement('button', { class: 'preset-temp-btn', 'data-temp': tm[1] }));
+          }
         }
-        const tempBtnRe = /class="[^"]*preset-temp-btn[^"]*"[^>]*data-temp="([^"]*)"/g;
-        let tm;
-        while ((tm = tempBtnRe.exec(this._innerHTML)) !== null) {
-          extra.push(createMockElement('button', { class: 'preset-temp-btn', 'data-temp': tm[1] }));
-        }
-        if (extra.length) {
-          extra.forEach(c => { c.parentNode = this; });
-          this.children = extra;
+        for (const cls of ['btn-preset-brew-tweaked', 'btn-preset-reset']) {
+          if (this._innerHTML.includes(cls)) this.appendChild(createMockElement('button', { class: cls }));
         }
       }
     },
@@ -135,6 +159,7 @@ function createMockElement(tagName = 'div', attrs = {}) {
       if (this.options[idx]) this.value = this.options[idx].value;
     },
     appendChild(child) {
+      this.removeChild(child);
       child.parentNode = this;
       this.children.push(child);
       return child;
@@ -197,17 +222,23 @@ function createMockElement(tagName = 'div', attrs = {}) {
   return elem;
 }
 
+function matchesAttribute(el, bracket) {
+  const raw = bracket.replace(/\]$/, '');
+  const eqIdx = raw.indexOf('=');
+  const key = eqIdx === -1 ? raw : raw.slice(0, eqIdx);
+  const expected = eqIdx === -1 ? null : raw.slice(eqIdx + 1).replace(/^['"]|['"]$/g, '');
+  const camel = key.replace(/^data-/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+  const val = el.dataset && el.dataset[camel];
+  return eqIdx === -1 ? val !== undefined : val === expected;
+}
+
 function matchesSimpleSelector(el, sel) {
   const token = sel.split(/\s+/).pop();
+  if (token.startsWith('[')) return matchesAttribute(el, token.slice(1));
   if (token.startsWith('.')) {
     const [cls, bracket] = token.slice(1).split('[');
     if (!el.classList || !el.classList.contains(cls)) return false;
-    if (bracket) {
-      const key = bracket.replace(/\]$/, '');
-      const camel = key.replace(/^data-/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      return el.dataset && el.dataset[camel] !== undefined;
-    }
-    return true;
+    return bracket ? matchesAttribute(el, bracket) : true;
   }
   if (token.startsWith('#')) return el.id === token.slice(1);
   return el.tagName === token.toUpperCase();
@@ -257,7 +288,11 @@ function createAppHarness(options = {}) {
     if (selAttrs.id) byId.set(selAttrs.id, selEl);
   }
 
-  // Hydrate repeatable selector collections needed by app.js
+  // Hydrate parent-child stage list in Custom tab & repeatable selector collections needed by app.js
+  if (byId.has('customStagesList') && byId.has('customStageCoffee') && byId.has('customStageWater')) {
+    byId.get('customStagesList').appendChild(byId.get('customStageCoffee'));
+    byId.get('customStagesList').appendChild(byId.get('customStageWater'));
+  }
   rootGroups.set('.nav-tab', ['tab-presets', 'tab-custom', 'tab-bloom', 'tab-library', 'tab-machine'].map(
     (tab, i) => createMockElement('button', { class: `nav-tab${i === 0 ? ' active' : ''}`, 'data-tab': tab })
   ));
@@ -1031,6 +1066,58 @@ test('Feature [v0.12.0]: 5s logo long-press countdown & forceAppCacheUpdate purg
   assert.equal(unregistered, 1);
   assert.deepEqual(deletedCaches, ['notpresso-v0.11.0', 'notpresso-v0.12.0']);
   assert.match(replacedUrl, /^\/my-notpresso\/\?refresh=\d+$/);
+});
+
+test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order swap (coffee-first vs water-first)', async () => {
+  const h = createAppHarness();
+  const state = h.getState();
+  const el = h.getEl();
+  const txs = [];
+  state.isConnected = true;
+  h.ctx.writeBleCharacteristic = async (u, b) => txs.push(h.ctx.bytesToHexNoSpaces(b));
+
+  // Two-phase preset panels (Americano & Great Americano XL) have 3x temps per stage and NO Split button
+  const ameCard = h.rootGroups.get('.drink-card[data-drink]').find(c => c.dataset.drink === 'americano');
+  const gxlCard = h.rootGroups.get('.drink-card[data-drink]').find(c => c.dataset.drink === 'great-americano');
+  assert.equal(ameCard.querySelectorAll('.preset-coffee-temp-btn').length, 3);
+  assert.equal(ameCard.querySelectorAll('.preset-water-temp-btn').length, 3);
+  assert.equal(ameCard.innerHTML.includes('data-temp="split"'), false);
+  assert.equal(gxlCard.innerHTML.includes('data-temp="split"'), false);
+
+  // Swap Americano to water-first and confirm stage DOM & badges flip (Water=1st, Coffee=2nd)
+  h.ctx.setPresetStageOrder('americano', 'water-first');
+  assert.equal(state.presetTweaks.americano.seq, 'water-first');
+  const orderedStages = ameCard.querySelectorAll('.preset-stage-item');
+  assert.deepEqual(orderedStages.map(s => s.dataset.stage), ['water', 'coffee']);
+  assert.equal(ameCard.querySelector('[data-stage-badge="water"]').textContent, '1st');
+  assert.equal(ameCard.querySelector('[data-stage-badge="coffee"]').textContent, '2nd');
+
+  // Matching stage temps (both Hot 0) with water-first -> single-stage custom payload 02 (water=125) then 01 (coffee=25)
+  txs.length = 0;
+  await h.ctx.executePresetDrink('americano', true);
+  assert.equal(state.activeWorkflow, null);
+  assert.equal(txs[0], '011008000002007D010019');
+  assert.equal(txs[1], '03050704000000000007');
+
+  // Distinct stage temps (Water=Warm 1, Coffee=Max 2) with water-first -> 2-stage split starting with Water (Warm 1)
+  txs.length = 0;
+  state.presetTweaks.americano.waterTemp = 1;
+  state.presetTweaks.americano.coffeeTemp = 2;
+  await h.ctx.executePresetDrink('americano', true);
+  assert.equal(state.activeWorkflow.type, 'two-stage-split');
+  assert.equal(state.activeWorkflow.stage1.waterMl, 125);
+  assert.equal(state.activeWorkflow.stage1.temp, 1);
+  assert.equal(state.activeWorkflow.stage2.coffeeMl, 25);
+  assert.equal(state.activeWorkflow.stage2.temp, 2);
+  assert.equal(txs[0], '011008000002007D000000');
+  assert.equal(txs[1], '03050704000000000107');
+
+  // Custom tab stage order swap places #customStageWater before #customStageCoffee
+  h.ctx.setCustomStageOrder('water-first');
+  assert.equal(state.customSequence, 'water-first');
+  assert.equal(el.customStagesList.firstElementChild, el.customStageWater);
+  assert.equal(el.badgeCustomWaterOrder.textContent, '1st');
+  assert.equal(el.badgeCustomCoffeeOrder.textContent, '2nd');
 });
 
 // Execute all tests sequentially
