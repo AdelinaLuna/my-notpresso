@@ -9,7 +9,7 @@
   "theme_color": "#101216",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%23C88D4B'><rect width='512' height='512' rx='100' fill='%23181B22'/><path d='M100 400h312v-32H100v32m280-208h-32v-48h32m0-32H120v160a64 64 0 0064 64h96a64 64 0 0064-64v-48h36a32 32 0 0032-32v-48a32 32 0 00-32-32z'/></svg>",
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'><rect width='64' height='64' rx='12' fill='%23181B22'/><g transform='translate(6 6) scale(0.8125)'><rect x='6' y='14' width='13' height='40' rx='3' fill='%231E2430' stroke='%23C88D4B' stroke-width='2'/><path d='M8 26h9v26H8z' fill='%233A82EE' fill-opacity='0.35'/><rect x='7' y='10' width='11' height='4' rx='1.5' fill='%23C88D4B'/><rect x='21' y='8' width='37' height='46' rx='5' fill='%23242936' stroke='%23C88D4B' stroke-width='2.2'/><line x1='25' y1='14' x2='41' y2='14' stroke='%238E95A5' stroke-width='2.2' stroke-linecap='round'/><circle cx='49' cy='14' r='3' fill='%23101216' stroke='%23C88D4B' stroke-width='1.8'/><circle cx='40' cy='25' r='6' fill='%23101216' stroke='%23C88D4B' stroke-width='2'/><line x1='40' y1='25' x2='40' y2='20.5' stroke='%23DF9E56' stroke-width='1.8' stroke-linecap='round'/><circle cx='40' cy='39' r='5' fill='%23101216' stroke='%23C88D4B' stroke-width='1.8'/><line x1='40' y1='39' x2='43.5' y2='39' stroke='%23DF9E56' stroke-width='1.8' stroke-linecap='round'/><path d='M37 46h6v3.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 37 49.5V46z' fill='%23C88D4B'/><rect x='29' y='54' width='22' height='4' rx='2' fill='%23C88D4B'/></g></svg>",
       "sizes": "192x192 512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"

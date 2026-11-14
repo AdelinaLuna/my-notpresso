@@ -1,9 +1,9 @@
-const CACHE_NAME = 'notpresso-v0.4.6';
+const CACHE_NAME = 'notpresso-v0.4.7';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=0.4.6',
-  './app.js?v=0.4.6',
+  './styles.css?v=0.4.7',
+  './app.js?v=0.4.7',
   './manifest.json',
   './documentation/NespressoExpertEN350G.pdf'
 ];
