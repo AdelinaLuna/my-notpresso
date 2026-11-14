@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'><rect x='6' y='14' width='13' height='40' rx='3' fill='%231E2430' stroke='%23C88D4B' stroke-width='2'/><path d='M8 26h9v26H8z' fill='%233A82EE' fill-opacity='0.35'/><rect x='7' y='10' width='11' height='4' rx='1.5' fill='%23C88D4B'/><rect x='21' y='8' width='37' height='46' rx='5' fill='%23242936' stroke='%23C88D4B' stroke-width='2.2'/><line x1='25' y1='14' x2='41' y2='14' stroke='%238E95A5' stroke-width='2.2' stroke-linecap='round'/><circle cx='49' cy='14' r='3' fill='%23101216' stroke='%23C88D4B' stroke-width='1.8'/><circle cx='40' cy='25' r='6' fill='%23101216' stroke='%23C88D4B' stroke-width='2'/><line x1='40' y1='25' x2='40' y2='20.5' stroke='%23DF9E56' stroke-width='1.8' stroke-linecap='round'/><circle cx='40' cy='39' r='5' fill='%23101216' stroke='%23C88D4B' stroke-width='1.8'/><line x1='40' y1='39' x2='43.5' y2='39' stroke='%23DF9E56' stroke-width='1.8' stroke-linecap='round'/><path d='M37 46h6v3.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 37 49.5V46z' fill='%23C88D4B'/><rect x='29' y='54' width='22' height='4' rx='2' fill='%23C88D4B'/></svg>">
 
-  <link rel="stylesheet" href="styles.css?v=0.5.1">
+  <link rel="stylesheet" href="styles.css?v=0.6.0">
 </head>
 <body>
   <div class="app-container">
@@ -104,83 +104,79 @@
 
     <!-- TAB 1: PRESETS & SCHEDULED BREW -->
     <main id="tab-presets" class="tab-pane active">
-      <!-- Temperature Selector (Verified from TemperatureConversion: 1=LOW, 0=MEDIUM, 2=HIGH) -->
-      <div class="card selector-card">
-        <label class="card-title">Brew Temperature</label>
-        <div class="temp-toggle-group">
-          <button class="temp-btn" data-temp="1">
-            <span class="temp-indicator temp-warm"></span>
-            <span class="temp-name">Warm (Low)</span>
-            <span class="temp-celsius">~80°C (0x01)</span>
-          </button>
-          <button class="temp-btn active" data-temp="0">
-            <span class="temp-indicator temp-hot"></span>
-            <span class="temp-name">Hot (Medium)</span>
-            <span class="temp-celsius">~85°C (0x00)</span>
-          </button>
-          <button class="temp-btn" data-temp="2">
-            <span class="temp-indicator temp-veryhot"></span>
-            <span class="temp-name">Extra Hot (Max)</span>
-            <span class="temp-celsius">~90°C (0x02)</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Drink Grid -->
+      <!-- Drink Grid (Hot Water first, tap card body to expand ad-hoc volume & temp options) -->
       <div class="drink-grid">
-        <button class="drink-card" data-drink="ristretto" data-size="0">
-          <div class="drink-icon">☕</div>
-          <div class="drink-info">
-            <div class="drink-name">Ristretto</div>
-            <div class="drink-vol">Rotary Dial Preset (Default 25 ml)</div>
+        <div class="drink-card" data-drink="hotwater" data-size="4">
+          <div class="drink-card-main">
+            <div class="drink-icon">💧</div>
+            <div class="drink-info">
+              <div class="drink-name">Hot Water <span class="drink-chevron" aria-hidden="true">▾</span></div>
+              <div class="drink-vol">Clean Bypass Spout (Default 200 ml)</div>
+            </div>
+            <button type="button" class="action-tag btn-preset-quick">Dispense</button>
           </div>
-          <span class="action-tag">Brew</span>
-        </button>
+          <div class="drink-expand-panel hidden"></div>
+        </div>
 
-        <button class="drink-card" data-drink="espresso" data-size="1">
-          <div class="drink-icon">☕</div>
-          <div class="drink-info">
-            <div class="drink-name">Espresso</div>
-            <div class="drink-vol">Rotary Dial Preset (Default 40 ml)</div>
+        <div class="drink-card" data-drink="ristretto" data-size="0">
+          <div class="drink-card-main">
+            <div class="drink-icon">☕</div>
+            <div class="drink-info">
+              <div class="drink-name">Ristretto <span class="drink-chevron" aria-hidden="true">▾</span></div>
+              <div class="drink-vol">Rotary Dial Preset (Default 25 ml)</div>
+            </div>
+            <button type="button" class="action-tag btn-preset-quick">Brew</button>
           </div>
-          <span class="action-tag">Brew</span>
-        </button>
+          <div class="drink-expand-panel hidden"></div>
+        </div>
 
-        <button class="drink-card" data-drink="lungo" data-size="2">
-          <div class="drink-icon">☕</div>
-          <div class="drink-info">
-            <div class="drink-name">Lungo</div>
-            <div class="drink-vol">Rotary Dial Preset (Default 110 ml)</div>
+        <div class="drink-card" data-drink="espresso" data-size="1">
+          <div class="drink-card-main">
+            <div class="drink-icon">☕</div>
+            <div class="drink-info">
+              <div class="drink-name">Espresso <span class="drink-chevron" aria-hidden="true">▾</span></div>
+              <div class="drink-vol">Rotary Dial Preset (Default 40 ml)</div>
+            </div>
+            <button type="button" class="action-tag btn-preset-quick">Brew</button>
           </div>
-          <span class="action-tag">Brew</span>
-        </button>
+          <div class="drink-expand-panel hidden"></div>
+        </div>
 
-        <button class="drink-card" data-drink="americano" data-size="5">
-          <div class="drink-icon">☕💧</div>
-          <div class="drink-info">
-            <div class="drink-name">Americano</div>
-            <div class="drink-vol">Rotary Dial Preset (25ml + 125ml)</div>
+        <div class="drink-card" data-drink="lungo" data-size="2">
+          <div class="drink-card-main">
+            <div class="drink-icon">☕</div>
+            <div class="drink-info">
+              <div class="drink-name">Lungo <span class="drink-chevron" aria-hidden="true">▾</span></div>
+              <div class="drink-vol">Rotary Dial Preset (Default 110 ml)</div>
+            </div>
+            <button type="button" class="action-tag btn-preset-quick">Brew</button>
           </div>
-          <span class="action-tag">Brew</span>
-        </button>
+          <div class="drink-expand-panel hidden"></div>
+        </div>
 
-        <button id="btnGreatAmericanoPreset" class="drink-card highlight-card">
-          <div class="drink-icon">🔥❄️</div>
-          <div class="drink-info">
-            <div class="drink-name">Great Americano XL <span class="mini-pill">Split-Temp</span></div>
-            <div class="drink-vol">40ml Coffee (Max 90°C) → 160ml Water (Warm 80°C)</div>
+        <div class="drink-card" data-drink="americano" data-size="5">
+          <div class="drink-card-main">
+            <div class="drink-icon">☕💧</div>
+            <div class="drink-info">
+              <div class="drink-name">Americano <span class="drink-chevron" aria-hidden="true">▾</span></div>
+              <div class="drink-vol">Rotary Dial Preset (25ml + 125ml)</div>
+            </div>
+            <button type="button" class="action-tag btn-preset-quick">Brew</button>
           </div>
-          <span class="action-tag">2-Stage</span>
-        </button>
+          <div class="drink-expand-panel hidden"></div>
+        </div>
 
-        <button class="drink-card" data-drink="hotwater" data-size="4">
-          <div class="drink-icon">💧</div>
-          <div class="drink-info">
-            <div class="drink-name">Hot Water</div>
-            <div class="drink-vol">Clean Bypass Spout (Default 200 ml)</div>
+        <div id="btnGreatAmericanoPreset" class="drink-card highlight-card" data-drink="great-americano">
+          <div class="drink-card-main">
+            <div class="drink-icon">🔥❄️</div>
+            <div class="drink-info">
+              <div class="drink-name">Great Americano XL <span class="mini-pill">Split-Temp</span> <span class="drink-chevron" aria-hidden="true">▾</span></div>
+              <div class="drink-vol">40ml Coffee (Max 90°C) → 160ml Water (Warm 80°C)</div>
+            </div>
+            <button type="button" class="action-tag btn-preset-quick">2-Stage</button>
           </div>
-          <span class="action-tag">Dispense</span>
-        </button>
+          <div class="drink-expand-panel hidden"></div>
+        </div>
       </div>
 
       <!-- Favorite & Suggested Recipes (Curated from Nespresso App + Custom) -->
@@ -799,7 +795,7 @@
     <div id="settingsModal" class="modal-backdrop hidden">
       <div class="modal-card">
         <div class="modal-header">
-          <h3>Settings & Pairing Key <span class="badge-version">v0.5.1</span></h3>
+          <h3>Settings & Pairing Key <span class="badge-version">v0.6.0</span></h3>
           <button id="btnCloseSettings" class="close-btn">&times;</button>
         </div>
         <div class="modal-body">
@@ -826,7 +822,7 @@
               <li>Paste the resulting 16-char key above and tap <strong>Connect</strong>!</li>
             </ol>
           </div>
-          <div class="settings-version-tag">Notpresso Expert v0.5.1 • Offline BLE Controller</div>
+          <div class="settings-version-tag">Notpresso Expert v0.6.0 • Offline BLE Controller</div>
         </div>
       </div>
     </div>
@@ -997,7 +993,7 @@
             <span id="logCounter" class="log-counter">0 events</span>
           </div>
           <div id="logConsole" class="log-console">
-            <div class="log-entry info">[System] Notpresso Expert v0.5.1 ready to connect to EN 350.G</div>
+            <div class="log-entry info">[System] Notpresso Expert v0.6.0 ready to connect to EN 350.G</div>
           </div>
         </div>
       </div>
@@ -1007,6 +1003,6 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="app.js?v=0.5.1"></script>
+  <script src="app.js?v=0.6.0"></script>
 </body>
 </html>

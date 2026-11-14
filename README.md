@@ -1,4 +1,4 @@
-# Notpresso Expert (EN 350.G) — v0.5.1
+# Notpresso Expert (EN 350.G) — v0.6.0
 
 <div align="center">
   <h3>Standalone Offline BLE Alternative for Nespresso Expert EN 350.G</h3>
@@ -26,7 +26,7 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 3. **Built-In Official User Manual (`📖` Header Button)**:
    - Embedded [`NespressoExpertEN350G.pdf`](documentation/NespressoExpertEN350G.pdf) viewer plus instant offline structured reader with search and section jump chips.
 4. **⭐ My Favorites & Suggestions (Home Presets Tab, v0.3.0)**:
-   - Displays your top favorite recipes right on the main home screen below the rotary dial presets.
+   - Displays your top favorite recipes right on the main home screen below the expandable quick-brew presets (`Hot Water` first, followed by coffee presets with per-drink ad-hoc volume/temp sliders in `v0.6.0`).
    - 1-tap brew access, **per-cup temperature override (`80°` Warm / `85°` Hot / `90°` Max / `Split`)** without duplicating saved recipes (`v0.5.0`), and 1-tap edit button without needing to switch tabs.
 5. **Curated Nespresso App Favorites Pre-Seeded (v0.3.0)**:
    - Includes all 9 custom recipes from the official Nespresso app:
@@ -104,11 +104,11 @@ If you want native Android BLE bonding (`createBond()`), background service resi
 
 ```text
 my-notpresso/
-├── index.html                # v0.5.1 Mobile-first Web Bluetooth PWA interface (5 tabs + Manual/Descale UI)
+├── index.html                # v0.6.0 Mobile-first Web Bluetooth PWA interface (5 tabs + Manual/Descale UI)
 ├── styles.css                # Dark Espresso & Crema Gold theme for Samsung S24 Ultra
-├── app.js                    # v0.5.1 BLE GATT engine, Per-Cup Temp Override, Drag Reorder, LED Telematics, Descale Guide, Split-Temp & Bloom/Clean orchestrator
+├── app.js                    # v0.6.0 BLE GATT engine, Expandable Presets, Per-Cup Temp Override, Drag Reorder, LED Telematics, Descale Guide, Split-Temp & Bloom/Clean
 ├── manifest.json             # PWA configuration for Add-to-Homescreen
-├── sw.js                     # Offline caching Service Worker (v0.5.1)
+├── sw.js                     # Offline caching Service Worker (v0.6.0)
 ├── server.py                 # Optional local Python server with Wi-Fi IP display
 ├── scripts/
 │   └── extract_auth_key.py   # Extracts 16-char BLE Auth Key from nespresso.ab / SQLite DB
