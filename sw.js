@@ -1,9 +1,9 @@
-const CACHE_NAME = 'notpresso-v0.7.1';
+const CACHE_NAME = 'notpresso-v0.7.2';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=0.7.1',
-  './app.js?v=0.7.1',
+  './styles.css?v=0.7.2',
+  './app.js?v=0.7.2',
   './manifest.json',
   './documentation/NespressoExpertEN350G.pdf'
 ];
@@ -29,7 +29,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then((response) => {
-      return response || fetch(event.request).catch(() => caches.match('./index.html'));
+      return response || fetch(event.request).catch(() => {
+        return event.request.mode === 'navigate' ? caches.match('./index.html') : Response.error();
+      });
     })
   );
 });

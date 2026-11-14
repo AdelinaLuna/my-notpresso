@@ -6,7 +6,7 @@ This document catalogs all 11 hardware subsystems exposed by the **Nespresso Exp
 
 ## 1. Complete Hardware Subsystems of the Nespresso Expert EN 350.G
 
-| # | Hardware Subsystem | GATT Service | Characteristics | Status in Notpresso `v0.4.0` |
+| # | Hardware Subsystem | GATT Service | Characteristics | Status in Notpresso |
 | :---: | :--- | :---: | :--- | :--- |
 | **1** | **Session Authentication** | `06aa1910` | `06aa3a41` (`8B` Write), `06aa3a51` (`1B` Read) | **Implemented** (Supports both 16-char `8...` BLE key and 32-char hash auto-derivation) |
 | **2** | **First-Time Key Onboarding** | `06aa1910` | `06aa3a61` (`TxLevel`), `06aa3a41`, `06aa3a51` | **Implemented** (Full OS-bond enrollment in `android-apk`; GATT write sequence in Web PWA) |

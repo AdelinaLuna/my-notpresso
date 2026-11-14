@@ -541,14 +541,6 @@ body {
   border: 2px solid #fff;
 }
 
-.slider-ticks {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--text-dim);
-  margin-top: 6px;
-}
-
 /* Recipe Summary */
 .recipe-summary {
   display: flex;

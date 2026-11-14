@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.7.1';
+const APP_VERSION = '0.7.2';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -93,7 +93,6 @@ const PRESET_DRINK_DEFAULTS = {
 const state = {
   isConnected: false,
   isScanning: false,
-  isNativeAndroid: typeof window.AndroidBle !== 'undefined',
   device: null,
   server: null,
   characteristics: new Map(),
@@ -155,7 +154,6 @@ const state = {
 
 // 3. DOM Elements Cache
 const el = {
-  envSubtitle: document.getElementById('envSubtitle'),
   connDot: document.getElementById('connDot'),
   connStatusText: document.getElementById('connStatusText'),
   deviceSubtext: document.getElementById('deviceSubtext'),
@@ -352,32 +350,17 @@ const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
 // 5. PairingKey Codec (4-bit right nibble shift + 0x80 leading prefix)
 function convertDbHash32ToBleKey16(hex32) {
-  const raw = hexToBytes(hex32.substring(0, 16));
-  const out = new Uint8Array(8);
-  let prevLow = 8; // High nibble of byte 0 is forced to 0x8 (0x80..0x8F)
-  for (let i = 0; i < 8; i++) {
-    const b = raw[i] & 0xFF;
-    out[i] = ((prevLow << 4) | (b >>> 4)) & 0xFF;
-    prevLow = b & 0x0F;
-  }
-  return bytesToHexNoSpaces(out);
+  return '8' + hex32.slice(0, 15).toUpperCase();
 }
 
 function generateValidNespressoKeyHex() {
   const rand = new Uint8Array(8);
-  if (window.crypto && window.crypto.getRandomValues) {
-    window.crypto.getRandomValues(rand);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(rand);
   } else {
     for (let i = 0; i < 8; i++) rand[i] = Math.floor(Math.random() * 256);
   }
-  const out = new Uint8Array(8);
-  let prevLow = 8;
-  for (let i = 0; i < 8; i++) {
-    const b = rand[i] & 0xFF;
-    out[i] = ((prevLow << 4) | (b >>> 4)) & 0xFF;
-    prevLow = b & 0x0F;
-  }
-  return bytesToHexNoSpaces(out);
+  return convertDbHash32ToBleKey16(bytesToHexNoSpaces(rand));
 }
 
 function normalizeAuthKeyInput(rawInput) {
@@ -560,10 +543,6 @@ function enqueueGattOp(fn) {
 
 async function writeBleCharacteristic(uuid, uint8Bytes) {
   return enqueueGattOp(async () => {
-    if (state.isNativeAndroid) {
-      window.AndroidBle.writeCharacteristicHex(uuid, bytesToHexNoSpaces(uint8Bytes));
-      return;
-    }
     const ch = state.characteristics.get(uuid);
     if (!ch) throw new Error(`Characteristic ${uuid.substring(4, 8)} not available`);
     if (ch.writeValueWithResponse) {
@@ -576,10 +555,6 @@ async function writeBleCharacteristic(uuid, uint8Bytes) {
 
 async function readBleCharacteristic(uuid) {
   return enqueueGattOp(async () => {
-    if (state.isNativeAndroid) {
-      window.AndroidBle.readCharacteristic(uuid);
-      return null;
-    }
     const ch = state.characteristics.get(uuid);
     if (!ch) throw new Error(`Characteristic ${uuid.substring(4, 8)} not available`);
     const val = await ch.readValue();
@@ -1765,17 +1740,54 @@ function renderRecipeTempPillsHtml(recipe, fallbackIdx = '') {
   return `<div class="recipe-temp-pills" role="group" aria-label="Per-cup temperature">${buttons}</div>`;
 }
 
-function bindRecipeTempPillListeners(container) {
-  if (!container) return;
-  container.querySelectorAll('.recipe-temp-pill').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+function bindSavedRecipeCardActions(container) {
+  if (!container || (container.dataset && container.dataset.actionsBound === '1')) return;
+  if (container.dataset) container.dataset.actionsBound = '1';
+
+  container.addEventListener('click', (e) => {
+    const tempPill = e.target.closest('.recipe-temp-pill');
+    if (tempPill) {
       e.stopPropagation();
-      const key = btn.dataset.recipeKey;
-      const rawMode = btn.dataset.tempMode;
+      const key = tempPill.dataset.recipeKey;
+      const rawMode = tempPill.dataset.tempMode;
       state.recipeTempOverrides[key] = rawMode === 'split' ? 'split' : parseInt(rawMode, 10);
       renderLibrary();
       renderFavoritesOnHome();
-    });
+      return;
+    }
+
+    const renameBtn = e.target.closest('.btn-inline-rename');
+    if (renameBtn) {
+      e.stopPropagation();
+      openRenameModal(parseInt(renameBtn.dataset.idx, 10));
+      return;
+    }
+
+    const brewBtn = e.target.closest('.btn-brew-saved, .btn-home-fav-brew');
+    if (brewBtn) {
+      executeSavedRecipe(parseInt(brewBtn.dataset.idx, 10));
+      return;
+    }
+
+    const editBtn = e.target.closest('.btn-edit-saved, .btn-home-fav-edit');
+    if (editBtn) {
+      editRecipeInCustomTab(parseInt(editBtn.dataset.idx, 10));
+      return;
+    }
+
+    const delBtn = e.target.closest('.btn-del-saved');
+    if (delBtn) {
+      const idx = parseInt(delBtn.dataset.idx, 10);
+      const r = state.savedRecipes[idx];
+      if (r && confirm(`Delete "${r.name}" from library?`)) {
+        delete state.recipeTempOverrides[getRecipeTempKey(r, idx)];
+        state.savedRecipes.splice(idx, 1);
+        persistSavedRecipes();
+        renderLibrary();
+        renderFavoritesOnHome();
+        showToast('Recipe deleted');
+      }
+    }
   });
 }
 
@@ -1835,49 +1847,9 @@ function renderLibrary() {
     el.libraryList.appendChild(item);
   });
 
-  // Per-cup temperature pills & long-press drag reordering
-  bindRecipeTempPillListeners(el.libraryList);
+  // Delegated card actions & long-press drag reordering
+  bindSavedRecipeCardActions(el.libraryList);
   bindLongPressReorder(el.libraryList, '.recipe-item');
-
-  // Rename buttons
-  document.querySelectorAll('.btn-inline-rename').forEach(b => {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const idx = parseInt(e.currentTarget.dataset.idx, 10);
-      openRenameModal(idx);
-    });
-  });
-
-  // Brew buttons
-  document.querySelectorAll('.btn-brew-saved').forEach(b => {
-    b.addEventListener('click', (e) => {
-      executeSavedRecipe(parseInt(e.currentTarget.dataset.idx, 10));
-    });
-  });
-
-  // Edit buttons
-  document.querySelectorAll('.btn-edit-saved').forEach(b => {
-    b.addEventListener('click', (e) => {
-      const idx = parseInt(e.currentTarget.dataset.idx, 10);
-      editRecipeInCustomTab(idx);
-    });
-  });
-
-  // Delete buttons
-  document.querySelectorAll('.btn-del-saved').forEach(b => {
-    b.addEventListener('click', (e) => {
-      const idx = parseInt(e.currentTarget.dataset.idx, 10);
-      const r = state.savedRecipes[idx];
-      if (confirm(`Delete "${r.name}" from library?`)) {
-        delete state.recipeTempOverrides[getRecipeTempKey(r, idx)];
-        state.savedRecipes.splice(idx, 1);
-        persistSavedRecipes();
-        renderLibrary();
-        renderFavoritesOnHome();
-        showToast('Recipe deleted');
-      }
-    });
-  });
 }
 
 function renderFavoritesOnHome() {
@@ -1917,21 +1889,8 @@ function renderFavoritesOnHome() {
     el.homeFavoritesList.appendChild(card);
   });
 
-  bindRecipeTempPillListeners(el.homeFavoritesList);
+  bindSavedRecipeCardActions(el.homeFavoritesList);
   bindLongPressReorder(el.homeFavoritesList, '.home-favorite-card');
-
-  document.querySelectorAll('.btn-home-fav-brew').forEach(b => {
-    b.addEventListener('click', (e) => {
-      executeSavedRecipe(parseInt(e.currentTarget.dataset.idx, 10));
-    });
-  });
-
-  document.querySelectorAll('.btn-home-fav-edit').forEach(b => {
-    b.addEventListener('click', (e) => {
-      const idx = parseInt(e.currentTarget.dataset.idx, 10);
-      editRecipeInCustomTab(idx);
-    });
-  });
 }
 
 function moveRecipeFromTo(fromIdx, toIdx) {
