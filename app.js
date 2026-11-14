@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.0';
+const APP_VERSION = '0.13.1';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -215,6 +215,7 @@ const el = {
   // Tab 2: Custom Recipe & Split-Temp
   btnLoadGreatAmericano: document.getElementById('btnLoadGreatAmericano'),
   customStagesList: document.getElementById('customStagesList'),
+  btnSwapCustomStages: document.getElementById('btnSwapCustomStages'),
   customStageCoffee: document.getElementById('customStageCoffee'),
   customStageWater: document.getElementById('customStageWater'),
   badgeCustomCoffeeOrder: document.getElementById('badgeCustomCoffeeOrder'),
@@ -2228,8 +2229,12 @@ function orderTwoStageElements(listEl, coffeeEl, waterEl, coffeeBadgeEl, waterBa
   if (listEl && coffeeEl && waterEl) {
     const first = waterFirst ? waterEl : coffeeEl;
     const second = waterFirst ? coffeeEl : waterEl;
+    const swapRow = listEl.querySelector ? listEl.querySelector('.stage-swap-row') : null;
     if (listEl.firstElementChild !== first) {
       listEl.insertBefore(first, listEl.firstElementChild);
+    }
+    if (swapRow) {
+      listEl.insertBefore(swapRow, null);
     }
     listEl.insertBefore(second, null);
   }
@@ -2247,15 +2252,6 @@ function setPresetStageOrder(drinkKey, seq) {
   state.presetTweaks[drinkKey].seq = seq === 'water-first' ? 'water-first' : 'coffee-first';
   const card = Array.from(el.presetDrinkCards || []).find(c => c.dataset && c.dataset.drink === drinkKey);
   if (card) syncPresetCardUI(card, drinkKey);
-}
-
-function bindStageListDrag(container, onOrderChange) {
-  bindLongPressReorder(container, '.preset-stage-item', {
-    onCommit: ({ ordered }) => {
-      const topStage = ordered[0] && ordered[0].dataset && ordered[0].dataset.stage;
-      onOrderChange(topStage === 'water' ? 'water-first' : 'coffee-first');
-    }
-  });
 }
 
 function bindLongPressReorder(container, itemSelector, options = {}) {
@@ -3147,11 +3143,12 @@ function syncPresetCardUI(card, drinkKey) {
 }
 
 function renderStageTempButtonsHtml(btnClass, selectedTemp) {
+  const classes = btnClass === 'preset-temp-btn' ? 'preset-temp-btn' : `preset-temp-btn ${btnClass}`;
   return [
     { mode: 1, label: 'Warm ~80°C' },
     { mode: 0, label: 'Hot ~85°C' },
     { mode: 2, label: 'Max ~90°C' }
-  ].map(t => `<button type="button" class="${btnClass}${selectedTemp === t.mode ? ' active' : ''}" data-temp="${t.mode}">${t.label}</button>`).join('');
+  ].map(t => `<button type="button" class="${classes}${selectedTemp === t.mode ? ' active' : ''}" data-temp="${t.mode}">${t.label}</button>`).join('');
 }
 
 function initPresetDrinkCards() {
@@ -3171,44 +3168,56 @@ function initPresetDrinkCards() {
       if (isTwoStagePreset(def)) {
         const cStageHtml = `
           <div class="preset-stage-item" data-stage="coffee">
-            <div class="recipe-drag-handle" title="Hold and drag to swap pour order" aria-label="Hold and drag to swap pour order">⋮⋮</div>
             <div class="preset-stage-body">
               <div class="slider-header" style="margin-bottom:0;">
                 <span class="form-label"><span class="stage-order-badge" data-stage-badge="coffee">1st</span> ☕ Coffee Stage</span>
                 <span class="slider-badge preset-coffee-val">${cfg.coffeeMl} ml</span>
               </div>
               <input type="range" class="styled-slider preset-coffee-slider" min="15" max="130" step="5" value="${cfg.coffeeMl}">
-              <div class="temp-toggle-group compact">
-                ${renderStageTempButtonsHtml('preset-coffee-temp-btn', cfg.coffeeTemp)}
+              <div class="preset-temp-row">
+                <span class="form-label" style="display:block; margin-bottom:6px;">Brew Temperature</span>
+                <div class="temp-toggle-group compact">
+                  ${renderStageTempButtonsHtml('preset-coffee-temp-btn', cfg.coffeeTemp)}
+                </div>
               </div>
             </div>
           </div>`;
+        const swapRowHtml = `
+          <div class="stage-swap-row">
+            <button type="button" class="btn-xs btn-swap-stages btn-preset-swap-stages">⇅ Swap Stage Order (1st ↔ 2nd)</button>
+          </div>`;
         const wStageHtml = `
           <div class="preset-stage-item" data-stage="water">
-            <div class="recipe-drag-handle" title="Hold and drag to swap pour order" aria-label="Hold and drag to swap pour order">⋮⋮</div>
             <div class="preset-stage-body">
               <div class="slider-header" style="margin-bottom:0;">
                 <span class="form-label"><span class="stage-order-badge" data-stage-badge="water">2nd</span> 💧 Water Stage</span>
                 <span class="slider-badge preset-water-val">${cfg.waterMl} ml</span>
               </div>
               <input type="range" class="styled-slider preset-water-slider" min="25" max="300" step="5" value="${cfg.waterMl}">
-              <div class="temp-toggle-group compact">
-                ${renderStageTempButtonsHtml('preset-water-temp-btn', cfg.waterTemp)}
+              <div class="preset-temp-row">
+                <span class="form-label" style="display:block; margin-bottom:6px;">Brew Temperature</span>
+                <div class="temp-toggle-group compact">
+                  ${renderStageTempButtonsHtml('preset-water-temp-btn', cfg.waterTemp)}
+                </div>
               </div>
             </div>
           </div>`;
 
         panel.innerHTML = `
-          <div class="preset-stages-list">${cfg.seq === 'water-first' ? (wStageHtml + cStageHtml) : (cStageHtml + wStageHtml)}</div>
-          <small class="field-hint">Hold &amp; drag <code>⋮⋮</code> on either stage to swap Coffee vs Water first. Distinct temps auto-run 2 stages.</small>
+          <div class="preset-stages-list">${cfg.seq === 'water-first' ? (wStageHtml + swapRowHtml + cStageHtml) : (cStageHtml + swapRowHtml + wStageHtml)}</div>
+          <small class="field-hint">Tap <strong>Swap Stage Order</strong> to flip Coffee vs Water first. Distinct temps auto-run 2 stages.</small>
           <div class="drink-expand-actions">
             <button type="button" class="btn-sm btn-preset-reset">Reset Default</button>
             <button type="button" class="btn btn-connect btn-preset-brew-tweaked" style="padding:7px 14px; font-size:12px;">${formatPresetActionText(def, cfg)}</button>
           </div>`;
 
-        const stagesList = panel.querySelector('.preset-stages-list');
-        if (stagesList) {
-          bindStageListDrag(stagesList, (seq) => setPresetStageOrder(drinkKey, seq));
+        const swapBtn = panel.querySelector('.btn-preset-swap-stages');
+        if (swapBtn) {
+          swapBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nextSeq = state.presetTweaks[drinkKey].seq === 'water-first' ? 'coffee-first' : 'water-first';
+            setPresetStageOrder(drinkKey, nextSeq);
+          });
         }
 
         panel.querySelectorAll('.preset-coffee-temp-btn').forEach(btn => {
@@ -3350,7 +3359,11 @@ function initListeners() {
   el.btnCancelSchedule.addEventListener('click', emergencyStop);
 
   // Tab 2: Custom Recipe & Two-Phase Stage Builder
-  bindStageListDrag(el.customStagesList, setCustomStageOrder);
+  if (el.btnSwapCustomStages) {
+    el.btnSwapCustomStages.addEventListener('click', () => {
+      setCustomStageOrder(state.customSequence === 'water-first' ? 'coffee-first' : 'water-first');
+    });
+  }
 
   el.btnLoadGreatAmericano.addEventListener('click', () => {
     state.customCoffeeMl = 40;

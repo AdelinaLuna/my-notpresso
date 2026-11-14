@@ -111,21 +111,26 @@ function createMockElement(tagName = 'div', attrs = {}) {
           cStage.appendChild(createMockElement('span', { class: 'stage-order-badge', 'data-stage-badge': 'coffee', textContent: '1st' }));
           cStage.appendChild(createMockElement('input', { class: 'preset-coffee-slider' }));
           cStage.appendChild(createMockElement('span', { class: 'preset-coffee-val' }));
-          ['1', '0', '2'].forEach(t => cStage.appendChild(createMockElement('button', { class: 'preset-coffee-temp-btn', 'data-temp': t })));
+          ['1', '0', '2'].forEach(t => cStage.appendChild(createMockElement('button', { class: 'preset-temp-btn preset-coffee-temp-btn', 'data-temp': t })));
+
+          const swapRow = createMockElement('div', { class: 'stage-swap-row' });
+          swapRow.appendChild(createMockElement('button', { class: 'btn-xs btn-swap-stages btn-preset-swap-stages' }));
 
           const wStage = createMockElement('div', { class: 'preset-stage-item', 'data-stage': 'water' });
           wStage.appendChild(createMockElement('span', { class: 'stage-order-badge', 'data-stage-badge': 'water', textContent: '2nd' }));
           wStage.appendChild(createMockElement('input', { class: 'preset-water-slider' }));
           wStage.appendChild(createMockElement('span', { class: 'preset-water-val' }));
-          ['1', '0', '2'].forEach(t => wStage.appendChild(createMockElement('button', { class: 'preset-water-temp-btn', 'data-temp': t })));
+          ['1', '0', '2'].forEach(t => wStage.appendChild(createMockElement('button', { class: 'preset-temp-btn preset-water-temp-btn', 'data-temp': t })));
 
           const wIdx = this._innerHTML.indexOf('data-stage="water"');
           const cIdx = this._innerHTML.indexOf('data-stage="coffee"');
           if (wIdx !== -1 && cIdx !== -1 && wIdx < cIdx) {
             stagesList.appendChild(wStage);
+            stagesList.appendChild(swapRow);
             stagesList.appendChild(cStage);
           } else {
             stagesList.appendChild(cStage);
+            stagesList.appendChild(swapRow);
             stagesList.appendChild(wStage);
           }
           this.appendChild(stagesList);
@@ -291,6 +296,10 @@ function createAppHarness(options = {}) {
   // Hydrate parent-child stage list in Custom tab & repeatable selector collections needed by app.js
   if (byId.has('customStagesList') && byId.has('customStageCoffee') && byId.has('customStageWater')) {
     byId.get('customStagesList').appendChild(byId.get('customStageCoffee'));
+    if (byId.has('customStageSwapRow') && byId.has('btnSwapCustomStages')) {
+      byId.get('customStageSwapRow').appendChild(byId.get('btnSwapCustomStages'));
+      byId.get('customStagesList').appendChild(byId.get('customStageSwapRow'));
+    }
     byId.get('customStagesList').appendChild(byId.get('customStageWater'));
   }
   rootGroups.set('.nav-tab', ['tab-presets', 'tab-custom', 'tab-bloom', 'tab-library', 'tab-machine'].map(
@@ -1076,17 +1085,25 @@ test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order sw
   state.isConnected = true;
   h.ctx.writeBleCharacteristic = async (u, b) => txs.push(h.ctx.bytesToHexNoSpaces(b));
 
-  // Two-phase preset panels (Americano & Great Americano XL) have 3x temps per stage and NO Split button
+  // Two-phase preset panels (Americano & Great Americano XL) have consistent Brew Temperature UI, swap button, and no drag handle
   const ameCard = h.rootGroups.get('.drink-card[data-drink]').find(c => c.dataset.drink === 'americano');
   const gxlCard = h.rootGroups.get('.drink-card[data-drink]').find(c => c.dataset.drink === 'great-americano');
+  const amePanel = ameCard.querySelector('.drink-expand-panel');
+  const gxlPanel = gxlCard.querySelector('.drink-expand-panel');
   assert.equal(ameCard.querySelectorAll('.preset-coffee-temp-btn').length, 3);
   assert.equal(ameCard.querySelectorAll('.preset-water-temp-btn').length, 3);
-  assert.equal(ameCard.innerHTML.includes('data-temp="split"'), false);
-  assert.equal(gxlCard.innerHTML.includes('data-temp="split"'), false);
+  assert.equal(ameCard.querySelectorAll('.preset-temp-btn').length, 6);
+  assert.equal(amePanel.innerHTML.includes('Brew Temperature'), true);
+  assert.equal(gxlPanel.innerHTML.includes('Brew Temperature'), true);
+  assert.equal(amePanel.innerHTML.includes('recipe-drag-handle'), false);
+  assert.equal(amePanel.innerHTML.includes('data-temp="split"'), false);
+  assert.equal(gxlPanel.innerHTML.includes('data-temp="split"'), false);
 
-  // Swap Americano to water-first and confirm stage DOM & badges flip (Water=1st, Coffee=2nd)
-  h.ctx.setPresetStageOrder('americano', 'water-first');
+  // Swap Americano via its single swap button and confirm stage DOM, middle swap row, & badges flip
+  await ameCard.querySelector('.btn-preset-swap-stages').dispatchEvent('click');
   assert.equal(state.presetTweaks.americano.seq, 'water-first');
+  const ameStageChildren = ameCard.querySelector('.preset-stages-list').children;
+  assert.equal(ameStageChildren[1].classList.contains('stage-swap-row'), true);
   const orderedStages = ameCard.querySelectorAll('.preset-stage-item');
   assert.deepEqual(orderedStages.map(s => s.dataset.stage), ['water', 'coffee']);
   assert.equal(ameCard.querySelector('[data-stage-badge="water"]').textContent, '1st');
@@ -1112,12 +1129,19 @@ test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order sw
   assert.equal(txs[0], '011008000002007D000000');
   assert.equal(txs[1], '03050704000000000107');
 
-  // Custom tab stage order swap places #customStageWater before #customStageCoffee
-  h.ctx.setCustomStageOrder('water-first');
+  // Custom tab swap button toggles water-first <-> coffee-first while keeping swap row between stages
+  await el.btnSwapCustomStages.dispatchEvent('click');
   assert.equal(state.customSequence, 'water-first');
   assert.equal(el.customStagesList.firstElementChild, el.customStageWater);
+  assert.equal(el.customStagesList.children[1].id, 'customStageSwapRow');
+  assert.equal(el.customStagesList.children[2], el.customStageCoffee);
   assert.equal(el.badgeCustomWaterOrder.textContent, '1st');
   assert.equal(el.badgeCustomCoffeeOrder.textContent, '2nd');
+  await el.btnSwapCustomStages.dispatchEvent('click');
+  assert.equal(state.customSequence, 'coffee-first');
+  assert.equal(el.customStagesList.firstElementChild, el.customStageCoffee);
+  assert.equal(el.customStagesList.children[1].id, 'customStageSwapRow');
+  assert.equal(el.customStagesList.children[2], el.customStageWater);
 });
 
 // Execute all tests sequentially

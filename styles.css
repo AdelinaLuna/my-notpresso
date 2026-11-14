@@ -390,7 +390,9 @@ body {
 }
 
 .temp-toggle-group.compact .temp-btn-custom,
-.temp-toggle-group.compact .preset-temp-btn {
+.temp-toggle-group.compact .preset-temp-btn,
+.temp-toggle-group.compact .preset-coffee-temp-btn,
+.temp-toggle-group.compact .preset-water-temp-btn {
   flex: 1;
   background: var(--bg-chip);
   border: 1px solid var(--border-subtle);
@@ -403,7 +405,9 @@ body {
 }
 
 .temp-toggle-group.compact .temp-btn-custom.active,
-.temp-toggle-group.compact .preset-temp-btn.active {
+.temp-toggle-group.compact .preset-temp-btn.active,
+.temp-toggle-group.compact .preset-coffee-temp-btn.active,
+.temp-toggle-group.compact .preset-water-temp-btn.active {
   background: var(--accent-gold-muted);
   border-color: var(--accent-gold);
   color: var(--accent-gold);
@@ -1749,7 +1753,7 @@ body {
   background: #101216;
 }
 
-/* Two-Stage Draggable Stages & Individual Stage Temperatures (v0.13.0 / #18) */
+/* Two-Stage Stage Swap & Individual Stage Temperatures (v0.13.1 / #18) */
 .preset-stages-list {
   display: flex;
   flex-direction: column;
@@ -1768,11 +1772,31 @@ body {
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.preset-stage-item.is-dragging {
-  border-color: var(--accent-gold);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-  transform: scale(0.99);
-  z-index: 5;
+.stage-swap-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: -2px 0;
+}
+
+.btn-swap-stages {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-gold);
+  background: rgba(200, 141, 75, 0.12);
+  border: 1px solid rgba(200, 141, 75, 0.4);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.btn-swap-stages:active {
+  transform: scale(0.97);
+  background: rgba(200, 141, 75, 0.22);
 }
 
 .preset-stage-body {

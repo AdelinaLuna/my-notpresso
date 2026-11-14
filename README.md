@@ -15,11 +15,14 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.13.0
+## 2. What's New in v0.5.0 – v0.13.1
 
-- **`v0.13.0` — Two-Phase Per-Stage 3x Temperatures & Draggable Stage Order (`#18`)**:
-  - Removed the separate `"Split"` temperature button from two-phase preset cards (`Americano`, `Great Americano XL`) and the Custom Recipe builder in favour of **3x individual temperature selectors (`Warm ~80°C`, `Hot ~85°C`, `Max ~90°C`) on both Coffee and Water stages**.
-  - Added **long-press drag reordering (`⋮⋮`)** on Coffee/Water stage cards to swap what dispenses first (`Coffee → Water` vs `Water → Coffee`), automatically choosing single-stage vs two-stage split brewing based on whether the stage temperatures match.
+- **`v0.13.1` — Consistent Stage Brew Temperature UI & One-Tap Stage Swap**:
+  - Unified the two-phase stage `"Brew Temperature"` label and active chip styling (`Americano`, `Great Americano XL`, and Custom Builder) to match single-stage preset cards (`Lungo`).
+  - Replaced long-press stage drag-and-drop with a dedicated **`⇅ Swap Stage Order (1st ↔ 2nd)`** button between Coffee and Water stages so volume sliders never accidentally trigger reordering.
+
+- **`v0.13.0` — Two-Phase Per-Stage 3x Temperatures & Stage Reordering (`#18`)**:
+  - Removed the separate `"Split"` temperature button from two-phase preset cards (`Americano`, `Great Americano XL`) and the Custom Recipe builder in favour of **3x individual temperature selectors (`Warm ~80°C`, `Hot ~85°C`, `Max ~90°C`) on both Coffee and Water stages**, automatically choosing single-stage vs two-stage split brewing when stage temperatures differ.
 
 - **`v0.12.0` — 5-Second Logo Long-Press Cache Reset & Offline Cache-First SW**:
   - Kept [sw.js](sw.js) **Cache-First** for instant offline launches while registering with `{ updateViaCache: 'none' }`.

@@ -234,13 +234,12 @@
           <h2 class="card-title" style="margin-bottom:0;">Craft Custom Recipe</h2>
           <button id="btnLoadGreatAmericano" class="btn-xs">⚡ Load Great Americano</button>
         </div>
-        <p class="card-desc" style="margin-top:4px;">Exact 1 ml control (<code>0</code> or <code>15–130 ml</code> Coffee + <code>0</code> or <code>25–300 ml</code> Water = up to <code>430 ml</code>). Hold and drag a stage to swap pour order, and pick each stage temperature independently.</p>
+        <p class="card-desc" style="margin-top:4px;">Exact 1 ml control (<code>0</code> or <code>15–130 ml</code> Coffee + <code>0</code> or <code>25–300 ml</code> Water = up to <code>430 ml</code>). Tap Swap Stage Order to flip Coffee vs Water first, and pick each stage temperature independently.</p>
 
-        <!-- Draggable Two-Stage Custom Builder (#18) -->
+        <!-- Two-Stage Custom Builder (#18) -->
         <div id="customStagesList" class="preset-stages-list">
           <!-- Stage Card: Coffee -->
           <div id="customStageCoffee" class="preset-stage-item" data-stage="coffee">
-            <div class="recipe-drag-handle" title="Hold and drag to swap pour order" aria-label="Hold and drag to swap pour order">⋮⋮</div>
             <div class="preset-stage-body">
               <div class="slider-header" style="margin-bottom:0;">
                 <label class="form-label"><span id="badgeCustomCoffeeOrder" class="stage-order-badge">1st</span> ☕ Coffee Extraction (<code>0</code> or <code>15–130 ml</code>)</label>
@@ -259,17 +258,23 @@
                 <button type="button" class="chip-btn" data-coffee="110">110ml (Lungo)</button>
                 <button type="button" class="chip-btn" data-coffee="130">130ml (Max)</button>
               </div>
-              <div class="temp-toggle-group compact">
-                <button type="button" class="temp-btn-coffee temp-btn-custom" data-temp="1">Warm ~80°C</button>
-                <button type="button" class="temp-btn-coffee temp-btn-custom" data-temp="0">Hot ~85°C</button>
-                <button type="button" class="temp-btn-coffee temp-btn-custom active" data-temp="2">Max ~90°C</button>
+              <div class="preset-temp-row">
+                <span class="form-label" style="display:block; margin-bottom:6px;">Brew Temperature</span>
+                <div class="temp-toggle-group compact">
+                  <button type="button" class="temp-btn-coffee temp-btn-custom" data-temp="1">Warm ~80°C</button>
+                  <button type="button" class="temp-btn-coffee temp-btn-custom" data-temp="0">Hot ~85°C</button>
+                  <button type="button" class="temp-btn-coffee temp-btn-custom active" data-temp="2">Max ~90°C</button>
+                </div>
               </div>
             </div>
           </div>
 
+          <div id="customStageSwapRow" class="stage-swap-row">
+            <button type="button" id="btnSwapCustomStages" class="btn-xs btn-swap-stages">⇅ Swap Stage Order (1st ↔ 2nd)</button>
+          </div>
+
           <!-- Stage Card: Water -->
           <div id="customStageWater" class="preset-stage-item" data-stage="water">
-            <div class="recipe-drag-handle" title="Hold and drag to swap pour order" aria-label="Hold and drag to swap pour order">⋮⋮</div>
             <div class="preset-stage-body">
               <div class="slider-header" style="margin-bottom:0;">
                 <label class="form-label"><span id="badgeCustomWaterOrder" class="stage-order-badge">2nd</span> 💧 Hot Water Bypass (<code>0</code> or <code>25–300 ml</code>)</label>
@@ -289,10 +294,13 @@
                 <button type="button" class="chip-btn" data-water="200">200ml</button>
                 <button type="button" class="chip-btn" data-water="300">300ml (Max)</button>
               </div>
-              <div class="temp-toggle-group compact">
-                <button type="button" class="temp-btn-water temp-btn-custom active" data-temp="1">Warm ~80°C</button>
-                <button type="button" class="temp-btn-water temp-btn-custom" data-temp="0">Hot ~85°C</button>
-                <button type="button" class="temp-btn-water temp-btn-custom" data-temp="2">Max ~90°C</button>
+              <div class="preset-temp-row">
+                <span class="form-label" style="display:block; margin-bottom:6px;">Brew Temperature</span>
+                <div class="temp-toggle-group compact">
+                  <button type="button" class="temp-btn-water temp-btn-custom active" data-temp="1">Warm ~80°C</button>
+                  <button type="button" class="temp-btn-water temp-btn-custom" data-temp="0">Hot ~85°C</button>
+                  <button type="button" class="temp-btn-water temp-btn-custom" data-temp="2">Max ~90°C</button>
+                </div>
               </div>
             </div>
           </div>
