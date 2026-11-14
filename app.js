@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.6.0';
+const APP_VERSION = '0.6.1';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -137,6 +137,8 @@ const state = {
   waterHardnessLevel: 2,
   sliderOpen: false,
   obstacleDetected: false,
+  errorPresent: false,
+  capsuleStockLow: false,
   pairingKeyStateByte: -1,
   capsuleStock: null,
   serialNumber: '--',
@@ -770,13 +772,19 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     state.waterTankEmpty = waterTankEmpty;
     state.capsuleContainerFull = capsuleContainerFull;
     state.descalingNeeded = descalingNeeded;
+    state.errorPresent = errorPresent;
+    state.capsuleStockLow = capsuleStockLow;
 
     if (bytes.length >= 4) {
       const stockCount = selectBit(bytes, 17, 26);
       const schedActive = getBitBoolean(bytes, 27);
       state.capsuleStock = stockCount;
       el.valStockCounter.textContent = stockCount < 1023 ? `${stockCount} caps` : 'Disabled';
-      el.badgeScheduleStatus.textContent = schedActive ? 'Timer Active' : 'Idle';
+      if (!schedActive) {
+        el.badgeScheduleStatus.textContent = 'Idle';
+      } else if (!el.badgeScheduleStatus.textContent.startsWith('In ')) {
+        el.badgeScheduleStatus.textContent = 'Timer Active';
+      }
     }
     if (bytes.length >= 6) {
       const sliderOpen = !getBitBoolean(bytes, 46);
@@ -823,6 +831,17 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     const isOpen = bytes[0] === 0x00;
     state.sliderOpen = isOpen;
     el.chipSliderState.textContent = isOpen ? 'Open' : 'Closed';
+    updateLedTelematicsBanner({
+      stateCode: state.machineState,
+      descalingNeeded: state.descalingNeeded,
+      waterTankEmpty: state.waterTankEmpty,
+      capsuleContainerFull: state.capsuleContainerFull,
+      sliderOpen: state.sliderOpen,
+      capsuleStockLow: state.capsuleStockLow,
+      errorPresent: state.errorPresent,
+      obstacleDetected: state.obstacleDetected
+    });
+    updateDescaleGuideUI();
     log(`[06aa3a22 Slider] ${isOpen ? 'OPEN (0x00)' : 'CLOSED (0x02)'}`, 'rx');
 
   } else if (uuid === BLE_UUIDS.CHAR_AUTH_TYPE) {
@@ -930,6 +949,12 @@ async function disconnectBle() {
 function onDisconnected() {
   state.isConnected = false;
   state.isScanning = false;
+  state.isBrewing = false;
+  state.activeWorkflow = null;
+  clearInterval(state.brewInterval);
+  clearInterval(state.soakInterval);
+  if (el.soakControlBox) el.soakControlBox.classList.add('hidden');
+  if (el.brewModal) el.brewModal.classList.add('hidden');
   state.characteristics.clear();
   updateConnectionUI();
   log('Disconnected from machine.', 'warn');
