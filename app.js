@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.4.7';
+const APP_VERSION = '0.5.0';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -135,6 +135,7 @@ const state = {
   descaleDone: false,
 
   savedRecipes: [],
+  recipeTempOverrides: {}, // Transient per-cup temperature overrides keyed by recipe.id: 1 (80°C), 0 (85°C), 2 (90°C), or 'split'
   editingRecipeId: null,
   renamingRecipeIndex: null
 };
@@ -1586,6 +1587,90 @@ function updateCupRangeHint() {
 }
 
 // 14. Saved Library & Favorites UI
+function getRecipeTempKey(recipe, fallbackIdx = '') {
+  return recipe && recipe.id ? recipe.id : `idx-${fallbackIdx}`;
+}
+
+function getEffectiveRecipeTempMode(recipe, fallbackIdx = '') {
+  const key = getRecipeTempKey(recipe, fallbackIdx);
+  const ov = state.recipeTempOverrides && state.recipeTempOverrides[key];
+  if (ov === 0 || ov === 1 || ov === 2) return ov;
+  if (ov === 'split' && recipe.splitTemp) return 'split';
+  return recipe.splitTemp ? 'split' : (recipe.temp !== undefined ? recipe.temp : 0);
+}
+
+function getRecipeDetailText(recipe, { includeTotal = true, compactSeq = true, fallbackIdx = '' } = {}) {
+  const mode = getEffectiveRecipeTempMode(recipe, fallbackIdx);
+  const tempDesc = mode === 'split'
+    ? `Split: ☕${getTempLabel(recipe.coffeeTemp)} / 💧${getTempLabel(recipe.waterTemp)}`
+    : getTempLabel(mode);
+
+  if (recipe.kind === 'bloom') {
+    const totalMl = (recipe.phase1Ml || 0) + (recipe.phase2Ml || 0);
+    const totalPart = includeTotal ? ` (${totalMl}ml)` : '';
+    return `${recipe.phase1Ml}ml Phase 1 → ${recipe.waitSec}s Soak → ${recipe.phase2Ml}ml Phase 2${totalPart} • ${tempDesc}`;
+  }
+
+  const totalMl = (recipe.coffeeMl || 0) + (recipe.waterMl || 0);
+  const seqLabel = compactSeq
+    ? (recipe.seq === 'water-first' ? 'Water→Coffee' : 'Coffee→Water')
+    : (recipe.seq === 'water-first' ? 'Water first' : 'Coffee first');
+  const totalPart = includeTotal ? ` (${totalMl}ml)` : '';
+  return `${recipe.coffeeMl}ml coffee + ${recipe.waterMl}ml water${totalPart} • ${tempDesc} • ${seqLabel}`;
+}
+
+function renderRecipeTempPillsHtml(recipe, fallbackIdx = '') {
+  const key = escapeHtml(getRecipeTempKey(recipe, fallbackIdx));
+  const mode = getEffectiveRecipeTempMode(recipe, fallbackIdx);
+  const options = [
+    { mode: 1, label: '80°', title: 'Warm ~80°C (Low)' },
+    { mode: 0, label: '85°', title: 'Hot ~85°C (Medium)' },
+    { mode: 2, label: '90°', title: 'Max ~90°C (High)' }
+  ];
+  if (recipe.splitTemp) {
+    options.push({ mode: 'split', label: 'Split', title: 'Saved Split Temperature' });
+  }
+  const buttons = options.map(opt => {
+    const isActive = mode === opt.mode;
+    return `<button type="button" class="recipe-temp-pill${isActive ? ' active' : ''}" data-recipe-key="${key}" data-temp-mode="${opt.mode}" title="${opt.title}" aria-pressed="${isActive}">${opt.label}</button>`;
+  }).join('');
+  return `<div class="recipe-temp-pills" role="group" aria-label="Per-cup temperature">${buttons}</div>`;
+}
+
+function bindRecipeTempPillListeners(container) {
+  if (!container) return;
+  container.querySelectorAll('.recipe-temp-pill').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.recipeKey;
+      const rawMode = btn.dataset.tempMode;
+      state.recipeTempOverrides[key] = rawMode === 'split' ? 'split' : parseInt(rawMode, 10);
+      renderLibrary();
+      renderFavoritesOnHome();
+    });
+  });
+}
+
+function executeSavedRecipe(idx) {
+  const r = state.savedRecipes[idx];
+  if (!r) return;
+  const mode = getEffectiveRecipeTempMode(r, idx);
+  if (r.kind === 'bloom') {
+    const tempCode = (mode === 0 || mode === 1 || mode === 2) ? mode : (r.temp !== undefined ? r.temp : 0);
+    return startWaterPauseSoakWorkflow(r.phase1Ml, r.waitSec, r.phase2Ml, tempCode);
+  }
+  if (mode === 0 || mode === 1 || mode === 2) {
+    return brewCustomRecipe(r.coffeeMl, r.waterMl, {
+      ...r,
+      splitTemp: false,
+      temp: mode,
+      coffeeTemp: mode,
+      waterTemp: mode
+    });
+  }
+  return brewCustomRecipe(r.coffeeMl, r.waterMl, r);
+}
+
 function renderLibrary() {
   if (!el.libraryList) return;
   el.libraryList.innerHTML = '';
@@ -1600,20 +1685,7 @@ function renderLibrary() {
     const item = document.createElement('div');
     item.className = 'recipe-item';
 
-    let details = '';
-    let totalMl = 0;
-    if (recipe.kind === 'bloom') {
-      totalMl = (recipe.phase1Ml || 0) + (recipe.phase2Ml || 0);
-      details = `${recipe.phase1Ml}ml Phase 1 → ${recipe.waitSec}s Soak → ${recipe.phase2Ml}ml Phase 2 (${totalMl}ml) • ${getTempLabel(recipe.temp)}`;
-    } else {
-      totalMl = (recipe.coffeeMl || 0) + (recipe.waterMl || 0);
-      const seqLabel = recipe.seq === 'water-first' ? 'Water→Coffee' : 'Coffee→Water';
-      const tempDesc = recipe.splitTemp
-        ? `Split: ☕${getTempLabel(recipe.coffeeTemp)} / 💧${getTempLabel(recipe.waterTemp)}`
-        : getTempLabel(recipe.temp);
-      details = `${recipe.coffeeMl}ml coffee + ${recipe.waterMl}ml water (${totalMl}ml) • ${tempDesc} • ${seqLabel}`;
-    }
-
+    const details = getRecipeDetailText(recipe, { includeTotal: true, compactSeq: true, fallbackIdx: idx });
     const isFirst = idx === 0;
     const isLast = idx === state.savedRecipes.length - 1;
 
@@ -1630,6 +1702,7 @@ function renderLibrary() {
         <div class="recipe-meta-details">${escapeHtml(details)}</div>
       </div>
       <div class="recipe-actions">
+        ${renderRecipeTempPillsHtml(recipe, idx)}
         <button class="btn btn-connect btn-brew-saved" data-idx="${idx}">Brew</button>
         <button class="icon-btn btn-edit-saved" data-idx="${idx}" title="Edit / Tweak in Custom Tab">🎛️</button>
         <button class="icon-btn btn-del-saved" data-idx="${idx}" title="Delete">🗑️</button>
@@ -1637,6 +1710,9 @@ function renderLibrary() {
     `;
     el.libraryList.appendChild(item);
   });
+
+  // Per-cup temperature pills
+  bindRecipeTempPillListeners(el.libraryList);
 
   // Reorder buttons
   document.querySelectorAll('.btn-move-up').forEach(b => {
@@ -1666,14 +1742,7 @@ function renderLibrary() {
   // Brew buttons
   document.querySelectorAll('.btn-brew-saved').forEach(b => {
     b.addEventListener('click', (e) => {
-      const idx = parseInt(e.currentTarget.dataset.idx, 10);
-      const r = state.savedRecipes[idx];
-      if (!r) return;
-      if (r.kind === 'bloom') {
-        startWaterPauseSoakWorkflow(r.phase1Ml, r.waitSec, r.phase2Ml, r.temp);
-      } else {
-        brewCustomRecipe(r.coffeeMl, r.waterMl, r);
-      }
+      executeSavedRecipe(parseInt(e.currentTarget.dataset.idx, 10));
     });
   });
 
@@ -1691,6 +1760,7 @@ function renderLibrary() {
       const idx = parseInt(e.currentTarget.dataset.idx, 10);
       const r = state.savedRecipes[idx];
       if (confirm(`Delete "${r.name}" from library?`)) {
+        delete state.recipeTempOverrides[getRecipeTempKey(r, idx)];
         state.savedRecipes.splice(idx, 1);
         persistSavedRecipes();
         renderLibrary();
@@ -1714,19 +1784,10 @@ function renderFavoritesOnHome() {
     const card = document.createElement('div');
     card.className = 'home-favorite-card';
 
-    let totalMl = 0;
-    let desc = '';
-    if (recipe.kind === 'bloom') {
-      totalMl = (recipe.phase1Ml || 0) + (recipe.phase2Ml || 0);
-      desc = `${recipe.phase1Ml}ml Phase 1 → ${recipe.waitSec}s Soak → ${recipe.phase2Ml}ml Phase 2 • ${getTempLabel(recipe.temp)}`;
-    } else {
-      totalMl = (recipe.coffeeMl || 0) + (recipe.waterMl || 0);
-      const tempDesc = recipe.splitTemp
-        ? `Split: ☕${getTempLabel(recipe.coffeeTemp)} / 💧${getTempLabel(recipe.waterTemp)}`
-        : getTempLabel(recipe.temp);
-      const seqLabel = recipe.seq === 'water-first' ? 'Water first' : 'Coffee first';
-      desc = `${recipe.coffeeMl}ml coffee + ${recipe.waterMl}ml water • ${tempDesc} • ${seqLabel}`;
-    }
+    const totalMl = recipe.kind === 'bloom'
+      ? (recipe.phase1Ml || 0) + (recipe.phase2Ml || 0)
+      : (recipe.coffeeMl || 0) + (recipe.waterMl || 0);
+    const desc = getRecipeDetailText(recipe, { includeTotal: false, compactSeq: false, fallbackIdx: idx });
 
     card.innerHTML = `
       <div class="home-fav-info">
@@ -1737,6 +1798,7 @@ function renderFavoritesOnHome() {
         <div class="home-fav-desc">${escapeHtml(desc)}</div>
       </div>
       <div class="home-fav-actions">
+        ${renderRecipeTempPillsHtml(recipe, idx)}
         <button class="btn btn-connect btn-home-fav-brew" data-idx="${idx}" style="padding:6px 14px; font-size:12px;">Brew</button>
         <button class="icon-btn btn-home-fav-edit" data-idx="${idx}" title="Edit in Custom Tab">🎛️</button>
       </div>
@@ -1744,16 +1806,11 @@ function renderFavoritesOnHome() {
     el.homeFavoritesList.appendChild(card);
   });
 
+  bindRecipeTempPillListeners(el.homeFavoritesList);
+
   document.querySelectorAll('.btn-home-fav-brew').forEach(b => {
     b.addEventListener('click', (e) => {
-      const idx = parseInt(e.currentTarget.dataset.idx, 10);
-      const r = state.savedRecipes[idx];
-      if (!r) return;
-      if (r.kind === 'bloom') {
-        startWaterPauseSoakWorkflow(r.phase1Ml, r.waitSec, r.phase2Ml, r.temp);
-      } else {
-        brewCustomRecipe(r.coffeeMl, r.waterMl, r);
-      }
+      executeSavedRecipe(parseInt(e.currentTarget.dataset.idx, 10));
     });
   });
 
@@ -1922,6 +1979,7 @@ function updateCurrentCustomRecipe() {
   existing.waterTemp = state.customWaterTemp;
   existing.temp = state.customTemp;
   existing.seq = state.customSequence;
+  delete state.recipeTempOverrides[getRecipeTempKey(existing, idx)];
 
   persistSavedRecipes();
   renderLibrary();
@@ -1942,6 +2000,7 @@ function saveCurrentBloomRecipe() {
     existing.waitSec = state.bloomWaitSec;
     existing.phase2Ml = state.bloomPhase2Ml;
     existing.temp = state.bloomTemp;
+    delete state.recipeTempOverrides[getRecipeTempKey(existing, existingIdx)];
     persistSavedRecipes();
     renderLibrary();
     renderFavoritesOnHome();
@@ -1972,6 +2031,7 @@ function saveCurrentBloomRecipe() {
 function restoreCuratedFavorites() {
   if (confirm('Restore the official Nespresso app favorites + multi-stage cycles to your library?')) {
     state.savedRecipes = JSON.parse(JSON.stringify(DEFAULT_FAVORITE_RECIPES));
+    state.recipeTempOverrides = {};
     persistSavedRecipes();
     renderLibrary();
     renderFavoritesOnHome();

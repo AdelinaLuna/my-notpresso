@@ -617,6 +617,7 @@ body {
   border-radius: var(--radius-lg);
   padding: 12px 14px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -659,7 +660,7 @@ body {
 
 .recipe-info-col {
   flex: 1;
-  min-width: 0;
+  min-width: 150px;
 }
 
 .recipe-name-row {
@@ -699,9 +700,47 @@ body {
 
 .recipe-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Inline Per-Cup Temperature Pills for Saved Recipes */
+.recipe-temp-pills {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.recipe-temp-pill {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 1.1;
+  transition: all 0.15s ease;
+}
+
+.recipe-temp-pill:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.recipe-temp-pill.active {
+  background: var(--accent-gold-muted);
+  color: var(--accent-gold);
+  box-shadow: inset 0 0 0 1px rgba(200, 141, 75, 0.45);
 }
 
 /* Home Tab Favorites Section */
@@ -718,6 +757,7 @@ body {
   border-radius: var(--radius-md);
   padding: 10px 12px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -731,7 +771,7 @@ body {
 
 .home-fav-info {
   flex: 1;
-  min-width: 0;
+  min-width: 150px;
 }
 
 .home-fav-top {
@@ -767,9 +807,12 @@ body {
 
 .home-fav-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 /* Modals */

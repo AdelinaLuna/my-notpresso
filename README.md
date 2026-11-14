@@ -1,8 +1,8 @@
-# Notpresso Expert (EN 350.G) — v0.4.7
+# Notpresso Expert (EN 350.G) — v0.5.0
 
 <div align="center">
   <h3>Standalone Offline BLE Alternative for Nespresso Expert EN 350.G</h3>
-  <p><strong>Zero Cloud Accounts • Visual Descaling Guide • Live LED Telematics • In-App Manual • Reorderable Favorites & Library • Split-Temp Recipes • 100% Offline</strong></p>
+  <p><strong>Zero Cloud Accounts • Per-Cup Temp Override • Visual Descaling Guide • Live LED Telematics • In-App Manual • Favorites & Library • Split-Temp Recipes • 100% Offline</strong></p>
 </div>
 
 ---
@@ -27,7 +27,7 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
    - Embedded [`NespressoExpertEN350G.pdf`](documentation/NespressoExpertEN350G.pdf) viewer plus instant offline structured reader with search and section jump chips.
 4. **⭐ My Favorites & Suggestions (Home Presets Tab, v0.3.0)**:
    - Displays your top favorite recipes right on the main home screen below the rotary dial presets.
-   - 1-tap brew access and 1-tap edit button without needing to switch tabs.
+   - 1-tap brew access, **per-cup temperature override (`80°` Warm / `85°` Hot / `90°` Max / `Split`)** without duplicating saved recipes (`v0.5.0`), and 1-tap edit button without needing to switch tabs.
 5. **Curated Nespresso App Favorites Pre-Seeded (v0.3.0)**:
    - Includes all 9 custom recipes from the official Nespresso app:
      - **Water Lungo Extra Hot** (`0 ml` Coffee + `270 ml` Water, Extra Hot ~90°C)
@@ -104,11 +104,11 @@ If you want native Android BLE bonding (`createBond()`), background service resi
 
 ```text
 my-notpresso/
-├── index.html                # v0.4.7 Mobile-first Web Bluetooth PWA interface (5 tabs + Manual/Descale UI)
+├── index.html                # v0.5.0 Mobile-first Web Bluetooth PWA interface (5 tabs + Manual/Descale UI)
 ├── styles.css                # Dark Espresso & Crema Gold theme for Samsung S24 Ultra
-├── app.js                    # v0.4.7 BLE GATT engine, LED Telematics, Descale Guide, Split-Temp & Bloom/Clean orchestrator
+├── app.js                    # v0.5.0 BLE GATT engine, Per-Cup Temp Override, LED Telematics, Descale Guide, Split-Temp & Bloom/Clean orchestrator
 ├── manifest.json             # PWA configuration for Add-to-Homescreen
-├── sw.js                     # Offline caching Service Worker (v0.4.7)
+├── sw.js                     # Offline caching Service Worker (v0.5.0)
 ├── server.py                 # Optional local Python server with Wi-Fi IP display
 ├── scripts/
 │   └── extract_auth_key.py   # Extracts 16-char BLE Auth Key from nespresso.ab / SQLite DB
