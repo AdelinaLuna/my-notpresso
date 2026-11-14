@@ -15,7 +15,9 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.13.4
+## 2. What's New in v0.5.0 – v0.13.5
+
+- **`v0.13.5` — Personalized Dial & Preset Volume Labels**: Connect telemetry now reads all 6 rotary dial targets `[0..5]`, persists them in `localStorage` (`notpresso_machine_dial_v1`), updates Presets subtitles/defaults, and derives slider volume labels solely from your synced machine settings instead of hardcoded OEM values.
 
 - **`v0.13.4` — Desktop 2nd-Stage Slider Drag Fix**: Stage reordering now only touches the DOM when the order actually changes, so dragging the 2nd stage volume slider with a mouse no longer stops after one step.
 
@@ -43,14 +45,18 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 - **`v0.10.0` — 10-Second Post-Brew Auto-Eject Countdown & 1-Tap Top-Up (Manual p. 11)**:
   - Keeps the brew modal open for 10s after normal brew completion with a live countdown to automatic capsule ejection, dismissible anytime (`Done / Close`), plus `+15 ml Coffee` and `+25 ml Hot Water` top-up buttons locked to the completed brew's temperature.
+
 - **`v0.9.0` — 1-Tap System Rinse & Streamlined Machine/Settings Layout**:
   - **Machine Diagnostics & Maintenance Promoted to Top of `Machine` Tab**: Quick access to Serial, Firmware, Capsule Stock, Descale Alert, Low-Stock Threshold, Fault History, and System Rinse without scrolling past cup-size calibration.
   - **First-Use / Post-Weekend System Rinse (`3x Lungo + 2x Hot Water`, Manual pp. 7, 10)**: Automated 5-shot sequential rinse workflow with empty-chamber/slider safety check, Manual checklist (`>= 650 ml` container), live `06aa3a12` step auto-advancement (`Shots 1–3 Lungo` via coffee outlet -> `Shots 4–5 Hot Water` via dedicated water spout), and 1-tap `Stop`.
   - **Settings Modal Factory Reset & Header Access**: Removed the duplicate onboarding button from the Machine tab (header ⚙️ icon already opens Settings & Pairing Key) and moved **⚠️ Send BLE Factory Reset (`03 07 00`)** to the bottom of the Settings modal.
+
 - **`v0.8.0` — Hardware Fault History (`06aa1930`) & Low-Stock Threshold (`06aa3a25`)**:
   - Inspect stored error slots `0–9` via `06aa3a13` + `06aa3a23` (`errorNumber`, category `NONE/INFO/WARN/ERROR/FATAL`, `subCode`) and configure the `06aa3a25` low-capsule warning threshold.
+
 - **`v0.7.0` — BLE Capsule Stock Counter (`06aa3a15`) & Maintenance Fixes (`v0.7.1–v0.7.3`)**:
   - Read/write hardware capsule stock (`0–1000`) or disable with `0xFFFF`, plus aligned Water Hardness defaults (`Level 3 — Hard`) and Manual p. 15 physical Factory Reset docs.
+
 - **`v0.5.0 – v0.6.0` — Per-Cup Temp Override, Drag Reorder & Expandable Home Presets**:
   - Tappable expandable home preset cards (Hot Water first) with ad-hoc sliders, per-cup temperature override pills on saved recipes, and long-press drag reordering.
 

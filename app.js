@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.4';
+const APP_VERSION = '0.13.5';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -789,7 +789,7 @@ async function readInitialTelemetry() {
   }
 
   if (state.characteristics.has(BLE_UUIDS.CHAR_CUP_TARGET) && state.characteristics.has(BLE_UUIDS.CHAR_CUP_VOLUME)) {
-    for (const targetIdx of [4, 5]) {
+    for (const targetIdx of [0, 1, 2, 3, 4, 5]) {
       try {
         state.lastCupTargetIdx = targetIdx;
         await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_TARGET, new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]));
@@ -801,6 +801,7 @@ async function readInitialTelemetry() {
         }
       } catch (_) {}
     }
+    state.lastCupTargetIdx = null;
   }
 }
 
@@ -854,30 +855,55 @@ function parseFaultRecordBytes(bytes, slotIdx = 0) {
   return { slot: slotIdx, errNum, errCat, category, errSub, isEmpty, summary };
 }
 
-function applyMachineCupTargetVolume(targetIdx, volMl) {
+const MACHINE_DIAL_STORAGE_KEY = 'notpresso_machine_dial_v1';
+const DIAL_COFFEE_DRINK_MAP = { 0: 'ristretto', 1: 'espresso', 2: 'lungo', 4: 'americano' };
+
+function loadMachineDialVolumes() {
+  try {
+    const raw = localStorage.getItem(MACHINE_DIAL_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== 'object') return;
+    for (let i = 0; i <= 5; i += 1) {
+      if (typeof saved[i] === 'number') applyMachineCupTargetVolume(i, saved[i], false);
+    }
+  } catch (_) {}
+}
+
+function applyMachineCupTargetVolume(targetIdx, volMl, persist = true) {
   if (typeof volMl !== 'number' || Number.isNaN(volMl) || volMl < 10 || volMl > 500) return;
   if (state.machineDialVolumes) state.machineDialVolumes[targetIdx] = volMl;
-  if (targetIdx === 4 && volMl >= 15 && volMl <= 130) {
-    PRESET_DRINK_DEFAULTS.americano.coffeeMl = volMl;
-    if (state.presetTweaks && state.presetTweaks.americano) {
-      state.presetTweaks.americano.coffeeMl = volMl;
+  if (persist && state.machineDialVolumes) {
+    try { localStorage.setItem(MACHINE_DIAL_STORAGE_KEY, JSON.stringify(state.machineDialVolumes)); } catch (_) {}
+  }
+
+  let updatedDrink = null;
+  const coffeeDrink = DIAL_COFFEE_DRINK_MAP[targetIdx];
+  if (coffeeDrink && volMl >= 15 && volMl <= 130) {
+    PRESET_DRINK_DEFAULTS[coffeeDrink].coffeeMl = volMl;
+    if (state.presetTweaks && state.presetTweaks[coffeeDrink]) {
+      state.presetTweaks[coffeeDrink].coffeeMl = volMl;
     }
+    updatedDrink = coffeeDrink;
   } else if (targetIdx === 5 && volMl >= 25 && volMl <= 300) {
     PRESET_DRINK_DEFAULTS.americano.waterMl = volMl;
     if (state.presetTweaks && state.presetTweaks.americano) {
       state.presetTweaks.americano.waterMl = volMl;
     }
-  } else {
-    return;
+    updatedDrink = 'americano';
   }
-  const ameCard = Array.from(el.presetDrinkCards || []).find(c => c.dataset && c.dataset.drink === 'americano');
-  if (ameCard) {
-    const volLabel = ameCard.querySelector('.drink-vol');
-    if (volLabel) {
-      volLabel.textContent = `Rotary Dial Preset (${PRESET_DRINK_DEFAULTS.americano.coffeeMl}ml + ${PRESET_DRINK_DEFAULTS.americano.waterMl}ml)`;
+
+  Array.from(el.presetDrinkCards || []).forEach(card => {
+    const key = card.dataset && card.dataset.drink;
+    if (!key) return;
+    if (updatedDrink === 'americano' && key === 'americano') {
+      const volLabel = card.querySelector('.drink-vol');
+      if (volLabel) {
+        volLabel.textContent = `Rotary Dial Preset (${PRESET_DRINK_DEFAULTS.americano.coffeeMl}ml + ${PRESET_DRINK_DEFAULTS.americano.waterMl}ml)`;
+      }
     }
-    syncPresetCardUI(ameCard, 'americano');
-  }
+    syncPresetCardUI(card, key);
+  });
 }
 
 function handleRawCharacteristicBytes(uuid, bytes) {
@@ -3160,21 +3186,18 @@ function getPresetVolumeTag(kind, ml) {
   if (kind === 'coffee') {
     if (ml === 15) return 'Min';
     if (ml === 130) return 'Max';
-    if (dial[4] && dial[4] !== dial[0] && ml === dial[4]) return 'Americano';
-    if (ml === dial[0] || ml === 25) return 'Ristretto';
-    if (ml === dial[1] || ml === 40) return 'Espresso';
-    if (ml === dial[2] || ml === 110) return 'Lungo';
+    if (ml === dial[0]) return 'Ristretto';
+    if (ml === dial[1]) return 'Espresso';
+    if (ml === dial[2]) return 'Lungo';
+    if (ml === dial[4]) return 'Americano';
     return '';
   }
   if (kind === 'water') {
     if (ml === 25) return 'Min';
     if (ml === 300) return 'Max';
-    if (dial[5] || ml === 125) {
-      if (ml === dial[5] || ml === 125) return 'Americano';
-    }
+    if (ml === dial[3]) return 'Hot Water';
+    if (ml === dial[5]) return 'Americano';
     if (ml === 160) return 'XL';
-    if (ml === 250 || (dial[3] && dial[3] !== 200 && ml === dial[3])) return 'Hot Water';
-    if (ml === 200) return 'Dial';
     return '';
   }
   return '';
@@ -3232,6 +3255,10 @@ function syncPresetCardUI(card, drinkKey) {
       btn.classList.toggle('active', parseInt(btn.dataset.temp, 10) === cfg.waterTemp);
     });
   } else {
+    const subtitleEl = card.querySelector('.drink-vol');
+    if (subtitleEl && (drinkKey === 'ristretto' || drinkKey === 'espresso' || drinkKey === 'lungo')) {
+      subtitleEl.textContent = `Rotary Dial Preset (${def.coffeeMl} ml)`;
+    }
     card.querySelectorAll('.preset-temp-btn').forEach(btn => {
       btn.classList.toggle('active', parseInt(btn.dataset.temp, 10) === cfg.temp);
     });
@@ -3858,6 +3885,7 @@ function initLogoHoldRefresh() {
 window.addEventListener('DOMContentLoaded', () => {
   applyAppVersion();
   initLogoHoldRefresh();
+  loadMachineDialVolumes();
   initListeners();
   loadSavedRecipes();
   renderLibrary();

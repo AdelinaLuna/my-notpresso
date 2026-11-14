@@ -1126,7 +1126,8 @@ test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order sw
   assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 15), '(Min) 15 ml');
   assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 55), '55 ml');
   assert.equal(h.ctx.formatPresetVolumeLabel('water', 125), '(Americano) 125 ml');
-  assert.equal(h.ctx.formatPresetVolumeLabel('water', 250), '(Hot Water) 250 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 200), '(Hot Water) 200 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 250), '250 ml');
   assert.equal(ameCard.querySelectorAll('.preset-coffee-temp-btn').length, 3);
   assert.equal(ameCard.querySelectorAll('.preset-water-temp-btn').length, 3);
   assert.equal(ameCard.querySelectorAll('.preset-temp-btn').length, 6);
@@ -1192,6 +1193,80 @@ test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order sw
   assert.equal(el.customStagesList.firstElementChild, el.customStageCoffee);
   assert.equal(el.customStagesList.children[1].id, 'customStageSwapRow');
   assert.equal(el.customStagesList.children[2], el.customStageWater);
+});
+
+test('Feature [v0.13.5]: Sync all 6 dial targets, persist to localStorage, and derive volume labels from machine settings', async () => {
+  const h = createAppHarness();
+  const state = h.getState();
+  const el = h.getEl();
+  const uuids = h.eval('BLE_UUIDS');
+  const defaults = h.eval('PRESET_DRINK_DEFAULTS');
+
+  const dialValues = { 0: 20, 1: 35, 2: 80, 3: 230, 4: 30, 5: 140 };
+  const writtenTargets = [];
+  state.characteristics.set(uuids.CHAR_CUP_TARGET, {});
+  state.characteristics.set(uuids.CHAR_CUP_VOLUME, {});
+  h.ctx.sleep = async () => {};
+  h.ctx.writeBleCharacteristic = async (uuid, bytes) => {
+    if (uuid === uuids.CHAR_CUP_TARGET) {
+      writtenTargets.push(((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF));
+    }
+  };
+  h.ctx.readBleCharacteristic = async (uuid) => {
+    if (uuid === uuids.CHAR_CUP_VOLUME) {
+      const v = dialValues[state.lastCupTargetIdx];
+      return new Uint8Array([(v >> 8) & 0xFF, v & 0xFF]);
+    }
+    return null;
+  };
+
+  await h.ctx.readInitialTelemetry();
+
+  assert.deepEqual(writtenTargets, [0, 1, 2, 3, 4, 5]);
+  assert.equal(state.lastCupTargetIdx, null);
+  assert.equal(defaults.lungo.coffeeMl, 80);
+  assert.equal(defaults.americano.coffeeMl, 30);
+  assert.equal(defaults.americano.waterMl, 140);
+  assert.equal(defaults.hotwater.waterMl, 250);
+
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 80), '(Lungo) 80 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 110), '110 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 20), '(Ristretto) 20 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 25), '25 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 35), '(Espresso) 35 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 40), '40 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 30), '(Americano) 30 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 230), '(Hot Water) 230 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 200), '200 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 140), '(Americano) 140 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 125), '125 ml');
+
+  const lungoCard = Array.from(el.presetDrinkCards).find(c => c.dataset.drink === 'lungo');
+  const ameCard = Array.from(el.presetDrinkCards).find(c => c.dataset.drink === 'americano');
+  assert.equal(lungoCard.querySelector('.drink-vol').textContent, 'Rotary Dial Preset (80 ml)');
+  assert.equal(ameCard.querySelector('.drink-vol').textContent, 'Rotary Dial Preset (30ml + 140ml)');
+
+  const saved = JSON.parse(h.storage.get('notpresso_machine_dial_v1'));
+  assert.equal(saved[2], 80);
+  assert.equal(saved[3], 230);
+
+  h.ctx.applyMachineCupTargetVolume(2, 70);
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 70), '(Lungo) 70 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 80), '80 ml');
+
+  // Offline boot restores stored personalized machine volumes before UI init
+  const h2 = createAppHarness({
+    initialStorage: {
+      notpresso_machine_dial_v1: JSON.stringify({ 0: 20, 1: 35, 2: 70, 3: 230, 4: 30, 5: 140 })
+    }
+  });
+  const d2 = h2.eval('PRESET_DRINK_DEFAULTS');
+  assert.equal(d2.lungo.coffeeMl, 70);
+  assert.equal(d2.hotwater.waterMl, 250);
+  assert.equal(h2.ctx.formatPresetVolumeLabel('coffee', 70), '(Lungo) 70 ml');
+  assert.equal(h2.ctx.formatPresetVolumeLabel('coffee', 110), '110 ml');
+  assert.equal(h2.ctx.formatPresetVolumeLabel('water', 230), '(Hot Water) 230 ml');
+  assert.equal(h2.ctx.formatPresetVolumeLabel('water', 140), '(Americano) 140 ml');
 });
 
 // Execute all tests sequentially
