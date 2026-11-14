@@ -33,3 +33,7 @@ It is designed as a clean-room interoperability reference for maintaining and ex
    - Complete inventory of all 11 hardware subsystems exposed by the Nespresso Expert EN 350.G.
    - Protocol compatibility across sibling Eugster/Frismag BLE appliances (Prodigio, Essenza Plus, Barista / Aeroccino).
    - Roadmap of additional hardware capabilities (Historical Error Log Diagnostics `06aa1930`, Hardware Firmware/Board Inspector `06aa3a21`, Stock Sync Keys `06aa3a35`, and Multi-Pulse Extraction) ready to be leveraged in future UI/UX iterations.
+
+6. [**06 — Material Design 3 UI Rework & Dual-Deployment Proposal (`06-material3-ui-rework-proposal.md`)**](./06-material3-ui-rework-proposal.md)
+   - Architecture blueprint for deploying an M3 (`Auto / Dark / Light`) PWA alongside Classic UI under `/next/` with isolated Service Workers/caches and separate Android home-screen installation.
+   - Decoupling the BLE/protocol core from DOM views, offline SVG vector icons, `4`-destination navigation (`Brew`, `Craft` including Bloom/Clean, `Saved`, `Machine`), and responsive layouts across Z Flip5 (Cover/Flex/Inner), S24 Ultra, tablets, and desktop.

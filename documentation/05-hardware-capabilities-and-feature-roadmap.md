@@ -59,3 +59,9 @@ The diagnostic subsystems below are now integrated into **Notpresso**, alongside
    - Located at the top of the **Machine** tab inside **Machine Diagnostics & Maintenance** per EN 350.G Manual pp. 7 & 10. Validates slider closure (`!state.sliderOpen`) and sequentially executes 3x Lungo (`0x02`, Medium/Hot `0x00`) through the coffee outlet followed by 2x Hot Water (`0x04`, Medium/Hot `0x00`) through the dedicated water spout, auto-advancing on `06aa3a12` `Brewing/Heating (4/1) -> Ready (2)` transitions (requiring a `>= 650 ml` catch container and drip-tray emptying on completion).
 5. **Wake-Up Morning Alarm with Pre-Warm (Future Idea)**:
    - Combining the hardware countdown timer (`03 05 07 04 <delay_sec> <temp> <id>`) with a `25 ml` Hot Water spout rinse (`0x04` or `0x07` water-only recipe) allows scheduling an automatic morning machine pre-warm and cup-rinse before pulling an espresso.
+
+---
+
+## 4. UI & UX Architecture Roadmap
+
+- [**06 — Material Design 3 UI Rework & Dual-Deployment Proposal (`06-material3-ui-rework-proposal.md`)**](./06-material3-ui-rework-proposal.md) — Evaluates running a parallel `ui-rework` PWA under `/next/` alongside Classic UI (`main`), decoupling the BLE protocol engine from DOM bindings, replacing emojis with an offline Material Symbols SVG sprite, supporting `Auto / Dark / Light` M3 themes, and adapting layouts across Galaxy S24 Ultra, Z Flip5 (Cover/Flex/Inner), tablets, and desktop browsers.
