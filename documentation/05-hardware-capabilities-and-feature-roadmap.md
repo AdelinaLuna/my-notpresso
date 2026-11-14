@@ -17,7 +17,7 @@ This document catalogs all 11 hardware subsystems exposed by the **Nespresso Exp
 | **7** | **Real-Time Telemetry & Interlocks** | `06aa1920` | `06aa3a12` (`48-bit` Status), `06aa3a22` (`Slider`), `06aa3a52` | **Implemented** (Full 48-bit bitfield decoder, live slider state, water-empty pause detector, and subcode alerts) |
 | **8** | **Rotary Dial Cup-Size Programming** | `06aa1940` | `06aa3a14` (`2B` Target), `06aa3a24` (`4B` Volume) | **Implemented** (Reads and writes all 6 physical dial cup slots) |
 | **9** | **Auto-Off Standby & Water Hardness** | `06aa1940` | `06aa3a44` (`3B` Read/Write with `0xFF` masks) | **Implemented** (`9m`, `30m`, `2h`, `8h` standby timer and `0–4` water hardness levels) |
-| **10** | **Capsule Stock & Low-Stock Threshold** | `06aa1950` | `06aa3a15` (`Stock`), `06aa3a25` (`Threshold`), `06aa3a35` (`Key`) | **Implemented** (`06aa3a15` counter read/write + `06aa3a12` 10-bit live counter; `06aa3a25`/`06aa3a35` documented for expansion) |
+| **10** | **Capsule Stock & Low-Stock Threshold** | `06aa1950` | `06aa3a15` (`Stock`), `06aa3a25` (`Threshold`), `06aa3a35` (`Key`) | **Implemented** (`06aa3a15` 2-byte BE `0–1000` count read/write & `0xFFFF` `DEACTIVATION_VALUE` disable control + `06aa3a12` 10-bit live counter; `06aa3a25`/`06aa3a35` documented for expansion) |
 | **11** | **Hardware Error Log History** | `06aa1930` | `06aa3a13` (`1B` Index), `06aa3a23` (`19B` Fault Record) | **Documented for Future UI** (Select error slot `0x00..0x09` on `06aa3a13` and read `errorNumber`, `category`, `subCode` on `06aa3a23`) |
 
 ---

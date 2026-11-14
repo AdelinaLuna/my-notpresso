@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.6.2';
+const APP_VERSION = '0.7.0';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -246,6 +246,10 @@ const el = {
   valFirmware: document.getElementById('valFirmware'),
   valStockCounter: document.getElementById('valStockCounter'),
   valDescaleStatus: document.getElementById('valDescaleStatus'),
+  inputStockCount: document.getElementById('inputStockCount'),
+  btnReadStock: document.getElementById('btnReadStock'),
+  btnWriteStock: document.getElementById('btnWriteStock'),
+  btnDisableStock: document.getElementById('btnDisableStock'),
   btnOpenOnboarding: document.getElementById('btnOpenOnboarding'),
   btnBleFactoryReset: document.getElementById('btnBleFactoryReset'),
   cardDescalingGuide: document.getElementById('cardDescalingGuide'),
@@ -737,7 +741,8 @@ async function readInitialTelemetry() {
     BLE_UUIDS.CHAR_SERIAL,
     BLE_UUIDS.CHAR_MACHINE_INFO,
     BLE_UUIDS.CHAR_USER_SETTINGS,
-    BLE_UUIDS.CHAR_SCHEDULE
+    BLE_UUIDS.CHAR_SCHEDULE,
+    BLE_UUIDS.CHAR_STOCK
   ]) {
     try {
       const bytes = await readBleCharacteristic(uuid);
@@ -765,6 +770,20 @@ function getBitBoolean(bytes, bitIndex) {
   return selectBit(bytes, bitIndex, bitIndex) > 0;
 }
 
+function updateCapsuleStockDisplay(stockVal, syncInput = false) {
+  state.capsuleStock = stockVal;
+  if (el.valStockCounter) {
+    if (stockVal === null) {
+      el.valStockCounter.textContent = 'Disabled';
+    } else {
+      el.valStockCounter.textContent = stockVal === 0 ? '0 caps (LED ON)' : `${stockVal} caps`;
+    }
+  }
+  if (syncInput && stockVal !== null && el.inputStockCount) {
+    el.inputStockCount.value = stockVal;
+  }
+}
+
 function handleRawCharacteristicBytes(uuid, bytes) {
   if (!bytes || bytes.length === 0) return;
 
@@ -789,8 +808,7 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     if (bytes.length >= 4) {
       const stockCount = selectBit(bytes, 17, 26);
       const schedActive = getBitBoolean(bytes, 27);
-      state.capsuleStock = stockCount;
-      el.valStockCounter.textContent = stockCount < 1023 ? `${stockCount} caps` : 'Disabled';
+      updateCapsuleStockDisplay(stockCount < 1023 ? stockCount : null, false);
       if (!schedActive) {
         el.badgeScheduleStatus.textContent = 'Idle';
       } else if (!el.badgeScheduleStatus.textContent.startsWith('In ')) {
@@ -912,6 +930,13 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     state.firmwareVersion = `FW ${fw} / HW ${hw}`;
     el.valFirmware.textContent = state.firmwareVersion;
     log(`[06aa3a21 MachineInfo] ${state.firmwareVersion}`, 'rx');
+
+  } else if (uuid === BLE_UUIDS.CHAR_STOCK && bytes.length >= 2) {
+    // CapsuleStock (06aa3a15): 2B BE uint16 (0..1000 active, 0xFFFF disabled)
+    const rawStock = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
+    const stockVal = (rawStock === 0xFFFF || rawStock > 1000) ? null : rawStock;
+    updateCapsuleStockDisplay(stockVal, true);
+    log(`[06aa3a15 CapsuleStock] ${stockVal === null ? 'DISABLED (0xFFFF)' : `${stockVal} capsules`}`, 'rx');
   }
 }
 
@@ -1466,6 +1491,64 @@ async function writeWaterHardness() {
     showToast(`Water hardness set to Level ${level}!`);
   } catch (err) {
     log(`Write water hardness error: ${err.message}`, 'err');
+    showToast(`Error: ${err.message}`);
+  }
+}
+
+async function readCapsuleStock() {
+  if (!state.isConnected) {
+    showToast('Please connect to the machine first!');
+    return;
+  }
+  try {
+    const bytes = await readBleCharacteristic(BLE_UUIDS.CHAR_STOCK);
+    if (bytes) {
+      handleRawCharacteristicBytes(BLE_UUIDS.CHAR_STOCK, bytes);
+      showToast(state.capsuleStock === null
+        ? 'Capsule stock tracking is disabled (0xFFFF)'
+        : `Capsule stock: ${state.capsuleStock} capsules`);
+    }
+  } catch (err) {
+    log(`Read 06aa3a15 error: ${err.message}`, 'err');
+    showToast(`Error: ${err.message}`);
+  }
+}
+
+async function writeCapsuleStock() {
+  if (!state.isConnected) {
+    showToast('Please connect to the machine first!');
+    return;
+  }
+  const parsed = parseInt(el.inputStockCount ? el.inputStockCount.value : '0', 10);
+  const count = Math.max(0, Math.min(1000, Number.isNaN(parsed) ? 0 : parsed));
+  if (el.inputStockCount) el.inputStockCount.value = count;
+  const payload = new Uint8Array([(count >> 8) & 0xFF, count & 0xFF]);
+  log(`Writing Capsule Stock (${count}) to 06aa3a15: ${bytesToHex(payload)}`, 'tx');
+  try {
+    await writeBleCharacteristic(BLE_UUIDS.CHAR_STOCK, payload);
+    updateCapsuleStockDisplay(count, false);
+    showToast(count === 0
+      ? 'Capsule stock set to 0 (Nespresso LED ON)!'
+      : `Capsule stock set to ${count}!`);
+  } catch (err) {
+    log(`Write 06aa3a15 error: ${err.message}`, 'err');
+    showToast(`Error: ${err.message}`);
+  }
+}
+
+async function disableCapsuleStock() {
+  if (!state.isConnected) {
+    showToast('Please connect to the machine first!');
+    return;
+  }
+  const payload = new Uint8Array([0xFF, 0xFF]);
+  log(`Disabling Capsule Stock (0xFFFF) on 06aa3a15: ${bytesToHex(payload)}`, 'tx');
+  try {
+    await writeBleCharacteristic(BLE_UUIDS.CHAR_STOCK, payload);
+    updateCapsuleStockDisplay(null, false);
+    showToast('Capsule stock tracking disabled (0xFFFF)!');
+  } catch (err) {
+    log(`Disable 06aa3a15 error: ${err.message}`, 'err');
     showToast(`Error: ${err.message}`);
   }
 }
@@ -3042,6 +3125,9 @@ function initListeners() {
   el.btnReadUserSettings.addEventListener('click', readUserSettings);
   el.btnWriteStandby.addEventListener('click', writeStandbyDelay);
   el.btnWriteHardness.addEventListener('click', writeWaterHardness);
+  if (el.btnReadStock) el.btnReadStock.addEventListener('click', readCapsuleStock);
+  if (el.btnWriteStock) el.btnWriteStock.addEventListener('click', writeCapsuleStock);
+  if (el.btnDisableStock) el.btnDisableStock.addEventListener('click', disableCapsuleStock);
   el.btnOpenOnboarding.addEventListener('click', () => {
     el.inputAuthKey.value = getStoredAuthKey();
     el.settingsModal.classList.remove('hidden');
