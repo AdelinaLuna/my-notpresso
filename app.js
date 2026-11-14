@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.4.4';
+const APP_VERSION = '0.4.5';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -1212,15 +1212,19 @@ async function resumePhase2Extraction() {
   el.soakControlBox.classList.add('hidden');
   el.brewCupGraphic.textContent = '☕';
 
+  const flushMl = wf.type === 'water-pause-soak'
+    ? Math.max(15, wf.phase2Ml - wf.phase1Ml)
+    : wf.phase2Ml;
+
   try {
-    log(`Triggering Phase 2 Extraction (${wf.phase2Ml} ml @ ${getTempLabel(wf.tempCode)})...`, 'tx');
+    log(`Triggering Phase 2 Extraction (${flushMl} ml @ ${getTempLabel(wf.tempCode)})...`, 'tx');
     state.activeWorkflow = null;
     await sendSingleStageCustomBrew(
-      wf.phase2Ml,
+      flushMl,
       0,
       wf.tempCode,
       'coffee-first',
-      `Phase 2: Extracting ${wf.phase2Ml} ml (${getTempLabel(wf.tempCode)})`
+      `Phase 2: Extracting ${flushMl} ml (${getTempLabel(wf.tempCode)})`
     );
   } catch (err) {
     log(`Phase 2 resume error: ${err.message}`, 'err');
