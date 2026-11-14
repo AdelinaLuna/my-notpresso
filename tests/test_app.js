@@ -1122,11 +1122,12 @@ test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order sw
   const gxlPanel = gxlCard.querySelector('.drink-expand-panel');
   assert.equal(ameCard.querySelector('.drink-icon').textContent, '☕💧');
   assert.equal(gxlCard.querySelector('.drink-icon').textContent, '💧☕');
-  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 110), '(Lungo) 110 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 80), '(Lungo) 80 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 110), '110 ml');
   assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 15), '(Min) 15 ml');
   assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 55), '55 ml');
   assert.equal(h.ctx.formatPresetVolumeLabel('water', 125), '(Americano) 125 ml');
-  assert.equal(h.ctx.formatPresetVolumeLabel('water', 200), '(Hot Water) 200 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 230), '(Hot Water) 230 ml');
   assert.equal(h.ctx.formatPresetVolumeLabel('water', 250), '250 ml');
   assert.equal(ameCard.querySelectorAll('.preset-coffee-temp-btn').length, 3);
   assert.equal(ameCard.querySelectorAll('.preset-water-temp-btn').length, 3);
@@ -1267,6 +1268,44 @@ test('Feature [v0.13.5]: Sync all 6 dial targets, persist to localStorage, and d
   assert.equal(h2.ctx.formatPresetVolumeLabel('coffee', 110), '110 ml');
   assert.equal(h2.ctx.formatPresetVolumeLabel('water', 230), '(Hot Water) 230 ml');
   assert.equal(h2.ctx.formatPresetVolumeLabel('water', 140), '(Americano) 140 ml');
+});
+
+test('Feature [v0.13.6]: Offline boot and quick calibration profile toggle sync select options, chips, and Presets without BLE', () => {
+  const h = createAppHarness();
+  const el = h.getEl();
+  const defaults = h.eval('PRESET_DRINK_DEFAULTS');
+  const lungoOpt = el.selectCupTarget.options[2];
+
+  // Clean boot uses My App Calibration consistently across dropdown text, hints, Presets, and labels
+  assert.equal(lungoOpt.dataset.def, '80');
+  assert.match(lungoOpt.textContent, /Default 80ml/);
+  assert.equal(el.btnProfileAppCalibration.classList.contains('active-chip'), true);
+  assert.equal(el.btnProfileFactoryDefaults.classList.contains('active-chip'), false);
+  assert.equal(defaults.lungo.coffeeMl, 80);
+  assert.equal(defaults.americano.coffeeMl, 40);
+  assert.equal(defaults.americano.waterMl, 140);
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 80), '(Lungo) 80 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 110), '110 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 230), '(Hot Water) 230 ml');
+
+  // Switching to Factory Defaults without machine connect updates everything and persists across reboot
+  h.ctx.applyFactoryDefaultsProfile();
+  assert.equal(lungoOpt.dataset.def, '110');
+  assert.match(lungoOpt.textContent, /Default 110ml/);
+  assert.equal(el.btnProfileFactoryDefaults.classList.contains('active-chip'), true);
+  assert.equal(el.btnProfileAppCalibration.classList.contains('active-chip'), false);
+  assert.equal(defaults.lungo.coffeeMl, 110);
+  assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 110), '(Lungo) 110 ml');
+  assert.equal(h.ctx.formatPresetVolumeLabel('water', 200), '(Hot Water) 200 ml');
+
+  const persisted = h.storage.get('notpresso_machine_dial_v1');
+  const hReload = createAppHarness({ initialStorage: { notpresso_machine_dial_v1: persisted } });
+  const elReload = hReload.getEl();
+  assert.equal(elReload.selectCupTarget.options[2].dataset.def, '110');
+  assert.match(elReload.selectCupTarget.options[2].textContent, /Default 110ml/);
+  assert.equal(elReload.btnProfileFactoryDefaults.classList.contains('active-chip'), true);
+  assert.equal(elReload.btnProfileAppCalibration.classList.contains('active-chip'), false);
+  assert.equal(hReload.ctx.formatPresetVolumeLabel('coffee', 110), '(Lungo) 110 ml');
 });
 
 // Execute all tests sequentially

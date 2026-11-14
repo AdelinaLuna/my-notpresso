@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.5';
+const APP_VERSION = '0.13.6';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -857,17 +857,35 @@ function parseFaultRecordBytes(bytes, slotIdx = 0) {
 
 const MACHINE_DIAL_STORAGE_KEY = 'notpresso_machine_dial_v1';
 const DIAL_COFFEE_DRINK_MAP = { 0: 'ristretto', 1: 'espresso', 2: 'lungo', 4: 'americano' };
+const DIAL_COFFEE_CHIP_LABELS = { 0: 'Ristretto', 1: 'Espresso', 2: 'Lungo' };
+
+function syncCupTargetOptionUI(targetIdx, volMl) {
+  if (!el.selectCupTarget) return;
+  const opt = Array.from(el.selectCupTarget.options || []).find(o => parseInt(o.value, 10) === targetIdx);
+  if (!opt) return;
+  opt.dataset.def = String(volMl);
+  if (opt.textContent) {
+    opt.textContent = opt.textContent.replace(/Default \d+ml/, `Default ${volMl}ml`);
+  }
+}
 
 function loadMachineDialVolumes() {
   try {
     const raw = localStorage.getItem(MACHINE_DIAL_STORAGE_KEY);
-    if (!raw) return;
+    if (!raw) return false;
     const saved = JSON.parse(raw);
-    if (!saved || typeof saved !== 'object') return;
+    if (!saved || typeof saved !== 'object') return false;
+    let loadedAny = false;
     for (let i = 0; i <= 5; i += 1) {
-      if (typeof saved[i] === 'number') applyMachineCupTargetVolume(i, saved[i], false);
+      if (typeof saved[i] === 'number') {
+        applyMachineCupTargetVolume(i, saved[i], false);
+        loadedAny = true;
+      }
     }
-  } catch (_) {}
+    return loadedAny;
+  } catch (_) {
+    return false;
+  }
 }
 
 function applyMachineCupTargetVolume(targetIdx, volMl, persist = true) {
@@ -875,6 +893,20 @@ function applyMachineCupTargetVolume(targetIdx, volMl, persist = true) {
   if (state.machineDialVolumes) state.machineDialVolumes[targetIdx] = volMl;
   if (persist && state.machineDialVolumes) {
     try { localStorage.setItem(MACHINE_DIAL_STORAGE_KEY, JSON.stringify(state.machineDialVolumes)); } catch (_) {}
+  }
+
+  syncCupTargetOptionUI(targetIdx, volMl);
+  if (el.selectCupTarget && parseInt(el.selectCupTarget.value, 10) === targetIdx) {
+    updateCupRangeHint();
+  }
+  syncDialProfileChipUI();
+
+  if (DIAL_COFFEE_CHIP_LABELS[targetIdx] && typeof document !== 'undefined') {
+    const chip = document.querySelector(`.chip-btn[data-dial-target="${targetIdx}"]`);
+    if (chip) {
+      chip.dataset.coffee = String(volMl);
+      chip.textContent = `${volMl}ml (${DIAL_COFFEE_CHIP_LABELS[targetIdx]})`;
+    }
   }
 
   let updatedDrink = null;
@@ -2665,16 +2697,40 @@ function restoreCuratedFavorites() {
 const DIAL_PROFILE_FACTORY = { 0: 25, 1: 40, 2: 110, 3: 200, 4: 25, 5: 125 };
 const DIAL_PROFILE_APP = { 0: 25, 1: 40, 2: 80, 3: 230, 4: 40, 5: 140 };
 
-function applyDialProfile(profileMap, activeBtn, toastText) {
-  Array.from(el.selectCupTarget.options).forEach((opt) => {
-    const idx = parseInt(opt.value, 10);
-    if (profileMap[idx] !== undefined) {
-      opt.dataset.def = String(profileMap[idx]);
+function dialMatchesProfile(dialMap, profileMap) {
+  if (!dialMap || !profileMap) return false;
+  for (let i = 0; i <= 5; i += 1) {
+    if (dialMap[i] !== profileMap[i]) return false;
+  }
+  return true;
+}
+
+function syncDialProfileChipUI() {
+  const dial = state.machineDialVolumes;
+  if (el.btnProfileFactoryDefaults) {
+    el.btnProfileFactoryDefaults.classList.toggle('active-chip', dialMatchesProfile(dial, DIAL_PROFILE_FACTORY));
+  }
+  if (el.btnProfileAppCalibration) {
+    el.btnProfileAppCalibration.classList.toggle('active-chip', dialMatchesProfile(dial, DIAL_PROFILE_APP));
+  }
+}
+
+function applyDialProfile(profileMap, activeBtn, toastText, persist = true) {
+  for (let i = 0; i <= 5; i += 1) {
+    if (typeof profileMap[i] === 'number') {
+      applyMachineCupTargetVolume(i, profileMap[i], false);
     }
-  });
-  [el.btnProfileFactoryDefaults, el.btnProfileAppCalibration].filter(Boolean).forEach((btn) => {
-    btn.classList.toggle('active-chip', btn === activeBtn);
-  });
+  }
+  if (persist && state.machineDialVolumes) {
+    try { localStorage.setItem(MACHINE_DIAL_STORAGE_KEY, JSON.stringify(state.machineDialVolumes)); } catch (_) {}
+  }
+  if (activeBtn) {
+    [el.btnProfileFactoryDefaults, el.btnProfileAppCalibration].filter(Boolean).forEach((btn) => {
+      btn.classList.toggle('active-chip', btn === activeBtn);
+    });
+  } else {
+    syncDialProfileChipUI();
+  }
   updateCupRangeHint();
   if (toastText) showToast(toastText);
 }
@@ -3885,13 +3941,17 @@ function initLogoHoldRefresh() {
 window.addEventListener('DOMContentLoaded', () => {
   applyAppVersion();
   initLogoHoldRefresh();
-  loadMachineDialVolumes();
+  const hasSavedDial = loadMachineDialVolumes();
+  if (!hasSavedDial) {
+    applyDialProfile(DIAL_PROFILE_APP, el.btnProfileAppCalibration, '', false);
+  }
   initListeners();
   loadSavedRecipes();
   renderLibrary();
   renderFavoritesOnHome();
   syncCustomRecipeUI();
-  applyDialProfile(DIAL_PROFILE_APP, el.btnProfileAppCalibration);
+  updateCupRangeHint();
+  syncDialProfileChipUI();
   updateDescaleGuideUI();
   registerServiceWorker();
   log(`Notpresso Expert v${APP_VERSION} initialized (AuthKey: ${getStoredAuthKey()}).`, 'info');
