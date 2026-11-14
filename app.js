@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.4.1';
+const APP_VERSION = '0.4.2';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -1808,6 +1808,19 @@ function switchTab(tabId) {
   el.tabPanes.forEach(p => p.classList.toggle('active', p.id === tabId));
 }
 
+function syncCustomRecipeUI() {
+  el.sliderCoffeeMl.value = state.customCoffeeMl;
+  el.sliderWaterMl.value = state.customWaterMl;
+  el.seqButtonsCustom.forEach(b => b.classList.toggle('active', b.dataset.seq === state.customSequence));
+  el.chkSplitTemp.checked = state.customSplitTemp;
+  el.singleTempGroup.classList.toggle('hidden', state.customSplitTemp);
+  el.splitTempGroup.classList.toggle('hidden', !state.customSplitTemp);
+  el.tempButtonsCustom.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customTemp));
+  el.tempButtonsCoffee.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customCoffeeTemp));
+  el.tempButtonsWater.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customWaterTemp));
+  updateCustomRecipeSummary();
+}
+
 function editRecipeInCustomTab(idx) {
   const r = state.savedRecipes[idx];
   if (!r) return;
@@ -1817,6 +1830,7 @@ function editRecipeInCustomTab(idx) {
     state.bloomWaitSec = r.waitSec || 60;
     state.bloomPhase2Ml = r.phase2Ml || 130;
     state.bloomTemp = r.temp !== undefined ? r.temp : 2;
+    state.editingRecipeId = r.id;
 
     el.sliderBloomPhase1Ml.value = state.bloomPhase1Ml;
     el.valBloomPhase1Ml.textContent = `${state.bloomPhase1Ml} ml`;
@@ -1839,8 +1853,8 @@ function editRecipeInCustomTab(idx) {
   state.customCoffeeMl = r.coffeeMl !== undefined ? r.coffeeMl : 40;
   state.customWaterMl = r.waterMl !== undefined ? r.waterMl : 160;
   state.customSplitTemp = !!r.splitTemp;
-  state.customCoffeeTemp = r.coffeeTemp !== undefined ? r.coffeeTemp : (r.temp || 2);
-  state.customWaterTemp = r.waterTemp !== undefined ? r.waterTemp : (r.temp || 1);
+  state.customCoffeeTemp = r.coffeeTemp !== undefined ? r.coffeeTemp : (r.temp !== undefined ? r.temp : 2);
+  state.customWaterTemp = r.waterTemp !== undefined ? r.waterTemp : (r.temp !== undefined ? r.temp : 1);
   state.customTemp = r.temp !== undefined ? r.temp : 0;
   state.customSequence = r.seq || 'coffee-first';
   state.editingRecipeId = r.id;
@@ -1912,8 +1926,25 @@ function updateCurrentCustomRecipe() {
 
 function saveCurrentBloomRecipe() {
   const inputName = el.inputBloomRecipeName ? el.inputBloomRecipeName.value.trim() : '';
-  const name = inputName || 'Cleaning Capsule Cycle';
+  const existingIdx = state.editingRecipeId
+    ? state.savedRecipes.findIndex(r => r.id === state.editingRecipeId && r.kind === 'bloom')
+    : -1;
 
+  if (existingIdx !== -1) {
+    const existing = state.savedRecipes[existingIdx];
+    existing.name = inputName || existing.name;
+    existing.phase1Ml = state.bloomPhase1Ml;
+    existing.waitSec = state.bloomWaitSec;
+    existing.phase2Ml = state.bloomPhase2Ml;
+    existing.temp = state.bloomTemp;
+    persistSavedRecipes();
+    renderLibrary();
+    renderFavoritesOnHome();
+    showToast(`Updated "${existing.name}"`);
+    return;
+  }
+
+  const name = inputName || 'Cleaning Capsule Cycle';
   const newRecipe = {
     id: Date.now().toString(),
     name: name,
@@ -1926,6 +1957,7 @@ function saveCurrentBloomRecipe() {
   };
 
   state.savedRecipes.unshift(newRecipe);
+  state.editingRecipeId = newRecipe.id;
   persistSavedRecipes();
   renderLibrary();
   renderFavoritesOnHome();
@@ -2532,6 +2564,7 @@ function initListeners() {
 
   // Tab 3: Bloom & Cleaning Capsule Lab
   function applyBloomTemplate(p1, wait, p2, temp, activeBtn) {
+    state.editingRecipeId = null;
     [el.btnPresetCleaning, el.btnPresetBloomEsp, el.btnPresetBloomLungo].forEach(b => b.classList.remove('active-chip'));
     if (activeBtn) activeBtn.classList.add('active-chip');
     state.bloomPhase1Ml = p1;
