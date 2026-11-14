@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'><rect x='6' y='14' width='13' height='40' rx='3' fill='%231E2430' stroke='%23C88D4B' stroke-width='2'/><path d='M8 26h9v26H8z' fill='%233A82EE' fill-opacity='0.35'/><rect x='7' y='10' width='11' height='4' rx='1.5' fill='%23C88D4B'/><rect x='21' y='8' width='37' height='46' rx='5' fill='%23242936' stroke='%23C88D4B' stroke-width='2.2'/><line x1='25' y1='14' x2='41' y2='14' stroke='%238E95A5' stroke-width='2.2' stroke-linecap='round'/><circle cx='49' cy='14' r='3' fill='%23101216' stroke='%23C88D4B' stroke-width='1.8'/><circle cx='40' cy='25' r='6' fill='%23101216' stroke='%23C88D4B' stroke-width='2'/><line x1='40' y1='25' x2='40' y2='20.5' stroke='%23DF9E56' stroke-width='1.8' stroke-linecap='round'/><circle cx='40' cy='39' r='5' fill='%23101216' stroke='%23C88D4B' stroke-width='1.8'/><line x1='40' y1='39' x2='43.5' y2='39' stroke='%23DF9E56' stroke-width='1.8' stroke-linecap='round'/><path d='M37 46h6v3.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 37 49.5V46z' fill='%23C88D4B'/><rect x='29' y='54' width='22' height='4' rx='2' fill='%23C88D4B'/></svg>">
 
-  <link rel="stylesheet" href="styles.css?v=0.7.3">
+  <link rel="stylesheet" href="styles.css?v=0.8.0">
 </head>
 <body>
   <div class="app-container">
@@ -576,6 +576,14 @@
             <span class="chip-label">Descale Alert</span>
             <span id="valDescaleStatus" class="chip-val">--</span>
           </div>
+          <div class="diag-item">
+            <span class="chip-label">Low-Stock (`3a25`)</span>
+            <span id="valStockThreshold" class="chip-val">--</span>
+          </div>
+          <div class="diag-item">
+            <span class="chip-label">Fault Log (`1930`)</span>
+            <span id="valFaultRecord" class="chip-val">--</span>
+          </div>
         </div>
 
         <div class="form-group" style="margin-top:14px; margin-bottom:0;">
@@ -589,6 +597,37 @@
           <small class="field-hint">
             Machine counts down each capsule brew. The front <strong>Nespresso Light</strong> turns on when stock hits <code>0</code>, or stays off when disabled with <code>0xFFFF</code>.
           </small>
+        </div>
+
+        <div class="form-group" style="margin-top:14px; margin-bottom:0;">
+          <label class="form-label" for="inputStockThreshold">Low-Stock Warning Threshold (`06aa3a25`, `0–1000`)</label>
+          <div class="btn-row" style="margin-top:6px;">
+            <input type="number" id="inputStockThreshold" class="styled-input" min="0" max="1000" step="1" value="10" style="flex:1;">
+            <button id="btnReadStockThreshold" class="btn btn-outline" style="padding:10px 12px;">Read</button>
+            <button id="btnWriteStockThreshold" class="btn btn-primary" style="flex:1.1; padding:10px;">Set Threshold</button>
+          </div>
+          <small class="field-hint">
+            Triggers the telemetry low-stock warning bit when capsule count drops to or below this threshold.
+          </small>
+        </div>
+
+        <div class="form-group" style="margin-top:14px; margin-bottom:0;">
+          <label class="form-label" for="selectErrorSlot">Hardware Fault History (`06aa1930`: `3a13` + `3a23`)</label>
+          <div class="btn-row" style="margin-top:6px;">
+            <select id="selectErrorSlot" class="styled-input" style="flex:1.3;">
+              <option value="0">Slot 0 (Latest)</option>
+              <option value="1">Slot 1</option>
+              <option value="2">Slot 2</option>
+              <option value="3">Slot 3</option>
+              <option value="4">Slot 4</option>
+              <option value="5">Slot 5</option>
+              <option value="6">Slot 6</option>
+              <option value="7">Slot 7</option>
+              <option value="8">Slot 8</option>
+              <option value="9">Slot 9</option>
+            </select>
+            <button id="btnReadErrorSlot" class="btn btn-outline" style="flex:1; padding:10px;">Read Fault Slot</button>
+          </div>
         </div>
 
         <div class="btn-stack" style="margin-top:12px;">
@@ -809,7 +848,7 @@
     <div id="settingsModal" class="modal-backdrop hidden">
       <div class="modal-card">
         <div class="modal-header">
-          <h3>Settings & Pairing Key <span class="badge-version">v0.7.3</span></h3>
+          <h3>Settings & Pairing Key <span class="badge-version">v0.8.0</span></h3>
           <button id="btnCloseSettings" class="close-btn">&times;</button>
         </div>
         <div class="modal-body">
@@ -836,7 +875,7 @@
               <li>Paste the resulting 16-char key above and tap <strong>Connect</strong>!</li>
             </ol>
           </div>
-          <div class="settings-version-tag">Notpresso Expert v0.7.3 • Offline BLE Controller</div>
+          <div class="settings-version-tag">Notpresso Expert v0.8.0 • Offline BLE Controller</div>
         </div>
       </div>
     </div>
@@ -1007,7 +1046,7 @@
             <span id="logCounter" class="log-counter">0 events</span>
           </div>
           <div id="logConsole" class="log-console">
-            <div class="log-entry info">[System] Notpresso Expert v0.7.3 ready to connect to EN 350.G</div>
+            <div class="log-entry info">[System] Notpresso Expert v0.8.0 ready to connect to EN 350.G</div>
           </div>
         </div>
       </div>
@@ -1017,6 +1056,6 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="app.js?v=0.7.3"></script>
+  <script src="app.js?v=0.8.0"></script>
 </body>
 </html>

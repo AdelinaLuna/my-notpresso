@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.7.3';
+const APP_VERSION = '0.8.0';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -26,15 +26,29 @@ const BLE_UUIDS = {
   CHAR_COMMAND:        '06aa3a42-f22a-11e3-9daa-0002a5d5c51b', // 3-11B Write: CommandKey
   CHAR_CMD_RESPONSE:   '06aa3a52-f22a-11e3-9daa-0002a5d5c51b', // 20B Read/Notify: CommandResponse
 
+  // Service 3: Hardware Error / Fault History Log (6448 = 0x1930)
+  SERVICE_ERROR:       '06aa1930-f22a-11e3-9daa-0002a5d5c51b',
+  CHAR_ERROR_SELECT:   '06aa3a13-f22a-11e3-9daa-0002a5d5c51b', // 1B Write: Error slot index (0x00..0x09)
+  CHAR_ERROR_INFO:     '06aa3a23-f22a-11e3-9daa-0002a5d5c51b', // 19B Read: [errorNumber, category<<4, subCode, ...]
+
   // Service 4: Rotary Dial Cup Sizes, Standby & Water Hardness (6464 = 0x1940)
   SERVICE_CUP_SIZE:    '06aa1940-f22a-11e3-9daa-0002a5d5c51b',
   CHAR_CUP_TARGET:     '06aa3a14-f22a-11e3-9daa-0002a5d5c51b', // 2B Write: CupTarget (0x0000..0x0005)
   CHAR_CUP_VOLUME:     '06aa3a24-f22a-11e3-9daa-0002a5d5c51b', // 4B Read/Write: [volHi, volLo, 0xFF, 0xFF]
   CHAR_USER_SETTINGS:  '06aa3a44-f22a-11e3-9daa-0002a5d5c51b', // 3-4B Read/Write: [standbyHi, standbyLo, hardness]
 
-  // Service 5: Capsule Stock Counter (6480 = 0x1950)
+  // Service 5: Capsule Stock Counter & Threshold (6480 = 0x1950)
   SERVICE_STOCK:       '06aa1950-f22a-11e3-9daa-0002a5d5c51b',
-  CHAR_STOCK:          '06aa3a15-f22a-11e3-9daa-0002a5d5c51b'  // 2B Read/Write: CapsuleStock (uint16 BE)
+  CHAR_STOCK:          '06aa3a15-f22a-11e3-9daa-0002a5d5c51b', // 2B Read/Write: CapsuleStock (uint16 BE)
+  CHAR_STOCK_THRESHOLD:'06aa3a25-f22a-11e3-9daa-0002a5d5c51b'  // 2B Read/Write: Low-Stock Threshold (uint16 BE)
+};
+
+const ERROR_CATEGORIES = {
+  0: 'NONE',
+  1: 'INFO',
+  2: 'WARN',
+  3: 'ERROR',
+  4: 'FATAL'
 };
 
 // Default fallback BLE Auth Key (Override in Settings -> Auth Key; persisted in localStorage)
@@ -140,6 +154,9 @@ const state = {
   capsuleStockLow: false,
   pairingKeyStateByte: -1,
   capsuleStock: null,
+  capsuleStockThreshold: null,
+  selectedErrorSlot: 0,
+  lastErrorRecord: null,
   serialNumber: '--',
   firmwareVersion: '--',
 
@@ -244,10 +261,17 @@ const el = {
   valFirmware: document.getElementById('valFirmware'),
   valStockCounter: document.getElementById('valStockCounter'),
   valDescaleStatus: document.getElementById('valDescaleStatus'),
+  valStockThreshold: document.getElementById('valStockThreshold'),
+  valFaultRecord: document.getElementById('valFaultRecord'),
   inputStockCount: document.getElementById('inputStockCount'),
   btnReadStock: document.getElementById('btnReadStock'),
   btnWriteStock: document.getElementById('btnWriteStock'),
   btnDisableStock: document.getElementById('btnDisableStock'),
+  inputStockThreshold: document.getElementById('inputStockThreshold'),
+  btnReadStockThreshold: document.getElementById('btnReadStockThreshold'),
+  btnWriteStockThreshold: document.getElementById('btnWriteStockThreshold'),
+  selectErrorSlot: document.getElementById('selectErrorSlot'),
+  btnReadErrorSlot: document.getElementById('btnReadErrorSlot'),
   btnOpenOnboarding: document.getElementById('btnOpenOnboarding'),
   btnBleFactoryReset: document.getElementById('btnBleFactoryReset'),
   cardDescalingGuide: document.getElementById('cardDescalingGuide'),
@@ -588,6 +612,7 @@ async function connectBle() {
       optionalServices: [
         BLE_UUIDS.SERVICE_AUTH,
         BLE_UUIDS.SERVICE_BREW,
+        BLE_UUIDS.SERVICE_ERROR,
         BLE_UUIDS.SERVICE_CUP_SIZE,
         BLE_UUIDS.SERVICE_STOCK
       ]
@@ -630,12 +655,16 @@ async function discoverAllCharacteristics(server) {
       chars: [BLE_UUIDS.CHAR_MACHINE_STATUS, BLE_UUIDS.CHAR_SLIDER, BLE_UUIDS.CHAR_SCHEDULE, BLE_UUIDS.CHAR_COMMAND, BLE_UUIDS.CHAR_CMD_RESPONSE]
     },
     {
+      serviceUuid: BLE_UUIDS.SERVICE_ERROR,
+      chars: [BLE_UUIDS.CHAR_ERROR_SELECT, BLE_UUIDS.CHAR_ERROR_INFO]
+    },
+    {
       serviceUuid: BLE_UUIDS.SERVICE_CUP_SIZE,
       chars: [BLE_UUIDS.CHAR_CUP_TARGET, BLE_UUIDS.CHAR_CUP_VOLUME, BLE_UUIDS.CHAR_USER_SETTINGS]
     },
     {
       serviceUuid: BLE_UUIDS.SERVICE_STOCK,
-      chars: [BLE_UUIDS.CHAR_STOCK]
+      chars: [BLE_UUIDS.CHAR_STOCK, BLE_UUIDS.CHAR_STOCK_THRESHOLD]
     }
   ];
 
@@ -717,7 +746,8 @@ async function readInitialTelemetry() {
     BLE_UUIDS.CHAR_MACHINE_INFO,
     BLE_UUIDS.CHAR_USER_SETTINGS,
     BLE_UUIDS.CHAR_SCHEDULE,
-    BLE_UUIDS.CHAR_STOCK
+    BLE_UUIDS.CHAR_STOCK,
+    BLE_UUIDS.CHAR_STOCK_THRESHOLD
   ]) {
     try {
       const bytes = await readBleCharacteristic(uuid);
@@ -757,6 +787,24 @@ function updateCapsuleStockDisplay(stockVal, syncInput = false) {
   if (syncInput && stockVal !== null && el.inputStockCount) {
     el.inputStockCount.value = stockVal;
   }
+}
+
+function parseStockThresholdBytes(bytes) {
+  if (!bytes || bytes.length < 2) return null;
+  return ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
+}
+
+function parseFaultRecordBytes(bytes, slotIdx = 0) {
+  if (!bytes || bytes.length < 2) return null;
+  const errNum = bytes[0] & 0xFF;
+  const errCat = (bytes[1] >> 4) & 0x0F;
+  const errSub = bytes.length >= 3 ? (bytes[2] & 0xFF) : 0;
+  const category = ERROR_CATEGORIES[errCat] || `CAT_${errCat}`;
+  const isEmpty = errNum === 0 && errCat === 0;
+  const summary = isEmpty
+    ? `Slot ${slotIdx}: None (OK)`
+    : `Slot ${slotIdx}: #${errNum} ${category} (sub 0x${errSub.toString(16).padStart(2, '0')})`;
+  return { slot: slotIdx, errNum, errCat, category, errSub, isEmpty, summary };
 }
 
 function handleRawCharacteristicBytes(uuid, bytes) {
@@ -912,6 +960,19 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     const stockVal = (rawStock === 0xFFFF || rawStock > 1000) ? null : rawStock;
     updateCapsuleStockDisplay(stockVal, true);
     log(`[06aa3a15 CapsuleStock] ${stockVal === null ? 'DISABLED (0xFFFF)' : `${stockVal} capsules`}`, 'rx');
+
+  } else if (uuid === BLE_UUIDS.CHAR_STOCK_THRESHOLD && bytes.length >= 2) {
+    const thresh = parseStockThresholdBytes(bytes);
+    state.capsuleStockThreshold = thresh;
+    if (el.valStockThreshold) el.valStockThreshold.textContent = `${thresh} caps`;
+    if (el.inputStockThreshold && thresh <= 1000) el.inputStockThreshold.value = thresh;
+    log(`[06aa3a25 StockThreshold] ${thresh} capsules (${bytesToHex(bytes)})`, 'rx');
+
+  } else if (uuid === BLE_UUIDS.CHAR_ERROR_INFO && bytes.length >= 2) {
+    const rec = parseFaultRecordBytes(bytes, state.selectedErrorSlot);
+    state.lastErrorRecord = rec;
+    if (el.valFaultRecord && rec) el.valFaultRecord.textContent = rec.summary;
+    log(`[06aa3a23 ErrorInfo] ${rec ? rec.summary : '--'} (${bytesToHex(bytes)})`, 'rx');
   }
 }
 
@@ -1525,6 +1586,68 @@ async function disableCapsuleStock() {
   } catch (err) {
     log(`Disable 06aa3a15 error: ${err.message}`, 'err');
     showToast(`Error: ${err.message}`);
+  }
+}
+
+async function readStockThreshold() {
+  if (!state.isConnected) {
+    showToast('Please connect to the machine first!');
+    return;
+  }
+  try {
+    const bytes = await readBleCharacteristic(BLE_UUIDS.CHAR_STOCK_THRESHOLD);
+    if (bytes) {
+      handleRawCharacteristicBytes(BLE_UUIDS.CHAR_STOCK_THRESHOLD, bytes);
+      showToast(`Low-stock threshold: ${state.capsuleStockThreshold} capsules`);
+    }
+  } catch (err) {
+    log(`Read 06aa3a25 error: ${err.message}`, 'err');
+    showToast(`Error: ${err.message}`);
+  }
+}
+
+async function writeStockThreshold() {
+  if (!state.isConnected) {
+    showToast('Please connect to the machine first!');
+    return;
+  }
+  const parsed = parseInt(el.inputStockThreshold ? el.inputStockThreshold.value : '10', 10);
+  const thresh = Math.max(0, Math.min(1000, Number.isNaN(parsed) ? 10 : parsed));
+  if (el.inputStockThreshold) el.inputStockThreshold.value = thresh;
+  const payload = new Uint8Array([(thresh >> 8) & 0xFF, thresh & 0xFF]);
+  log(`Writing Low-Stock Threshold (${thresh}) to 06aa3a25: ${bytesToHex(payload)}`, 'tx');
+  try {
+    await writeBleCharacteristic(BLE_UUIDS.CHAR_STOCK_THRESHOLD, payload);
+    state.capsuleStockThreshold = thresh;
+    if (el.valStockThreshold) el.valStockThreshold.textContent = `${thresh} caps`;
+    showToast(`Low-stock warning threshold set to ${thresh}!`);
+  } catch (err) {
+    log(`Write 06aa3a25 error: ${err.message}`, 'err');
+    showToast(`Error: ${err.message}`);
+  }
+}
+
+async function readErrorLogSlot() {
+  if (!state.isConnected) {
+    showToast('Please connect to the machine first!');
+    return;
+  }
+  const parsed = parseInt(el.selectErrorSlot ? el.selectErrorSlot.value : '0', 10);
+  const slot = Math.max(0, Math.min(9, Number.isNaN(parsed) ? 0 : parsed));
+  state.selectedErrorSlot = slot;
+  const selPayload = new Uint8Array([slot & 0xFF]);
+  log(`Selecting Fault History slot ${slot} on 06aa3a13: ${bytesToHex(selPayload)}`, 'tx');
+  try {
+    await writeBleCharacteristic(BLE_UUIDS.CHAR_ERROR_SELECT, selPayload);
+    await sleep(80);
+    const bytes = await readBleCharacteristic(BLE_UUIDS.CHAR_ERROR_INFO);
+    if (bytes) {
+      handleRawCharacteristicBytes(BLE_UUIDS.CHAR_ERROR_INFO, bytes);
+      showToast(state.lastErrorRecord ? state.lastErrorRecord.summary : `Read fault slot ${slot}`);
+    }
+  } catch (err) {
+    log(`Read fault history 06aa1930 error: ${err.message}`, 'err');
+    showToast(`Fault log error: ${err.message}`);
   }
 }
 
@@ -3087,6 +3210,9 @@ function initListeners() {
   if (el.btnReadStock) el.btnReadStock.addEventListener('click', readCapsuleStock);
   if (el.btnWriteStock) el.btnWriteStock.addEventListener('click', writeCapsuleStock);
   if (el.btnDisableStock) el.btnDisableStock.addEventListener('click', disableCapsuleStock);
+  if (el.btnReadStockThreshold) el.btnReadStockThreshold.addEventListener('click', readStockThreshold);
+  if (el.btnWriteStockThreshold) el.btnWriteStockThreshold.addEventListener('click', writeStockThreshold);
+  if (el.btnReadErrorSlot) el.btnReadErrorSlot.addEventListener('click', readErrorLogSlot);
   el.btnOpenOnboarding.addEventListener('click', () => {
     el.inputAuthKey.value = getStoredAuthKey();
     el.settingsModal.classList.remove('hidden');
