@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.4.2';
+const APP_VERSION = '0.4.3';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -1253,9 +1253,9 @@ async function handleWorkflowStatusUpdate(prevState, newState, waterTankEmpty) {
     }
   }
 
-  // 3. If 2-Stage Bloom/Clean Macro finished Stage 1 (transitioned from BREWING to READY=2):
+  // 3. If 2-Stage Bloom/Clean Macro finished Stage 1 (transitioned from BREWING/HEAT_UP to READY=2):
   if (wf && wf.type === 'two-stage-bloom' && wf.stage === 1 && !wf.soakStarted) {
-    if (prevState === 4 && newState === 2) {
+    if ((prevState === 4 || prevState === 1) && newState === 2) {
       log(`Phase 1 complete. Starting ${wf.waitSec}s soak/bloom countdown...`, 'info');
       beginSoakCountdown(wf.waitSec, 300);
       return;
@@ -1472,7 +1472,9 @@ function startBrewTracking(title, subtitle, durationSec) {
       }
     }
 
-    if (elapsedSec >= state.brewDurationSec) {
+    const isMachineBusy = !!(MACHINE_STATES[state.machineState] && MACHINE_STATES[state.machineState].isBusy);
+    const fallbackSec = wf ? state.brewDurationSec + 35 : state.brewDurationSec;
+    if (!isMachineBusy && elapsedSec >= fallbackSec) {
       // Fallback if 06aa3a12 notifications did not fire for 2-stage split-temp:
       if (wf && wf.type === 'two-stage-split' && wf.stage === 1 && !wf.stage2Triggered) {
         wf.stage = 2;
