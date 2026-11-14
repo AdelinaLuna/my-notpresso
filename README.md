@@ -15,7 +15,9 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.13.3
+## 2. What's New in v0.5.0 – v0.13.4
+
+- **`v0.13.4` — Desktop 2nd-Stage Slider Drag Fix**: Stage reordering now only touches the DOM when the order actually changes, so dragging the 2nd stage volume slider with a mouse no longer stops after one step.
 
 - **`v0.13.3` — Stage-Order Emoji Sync & Prefix Volume Badges**:
   - Synchronized two-stage preset card emoji icons (`☕💧` for `Coffee → Water`, `💧☕` for `Water → Coffee`) and subtitles with the selected stage order.

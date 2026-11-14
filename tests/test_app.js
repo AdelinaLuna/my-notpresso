@@ -1136,6 +1136,18 @@ test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order sw
   assert.equal(amePanel.innerHTML.includes('data-temp="split"'), false);
   assert.equal(gxlPanel.innerHTML.includes('data-temp="split"'), false);
 
+  // Regression [v0.13.4]: slider input re-sync must not move stage nodes already in order (breaks desktop 2nd-stage drag)
+  const ameList = ameCard.querySelector('.preset-stages-list');
+  let domMoves = 0;
+  const origAppend = ameList.appendChild.bind(ameList);
+  const origInsert = ameList.insertBefore.bind(ameList);
+  ameList.appendChild = (n) => { domMoves++; return origAppend(n); };
+  ameList.insertBefore = (n, r) => { domMoves++; return origInsert(n, r); };
+  h.ctx.syncPresetCardUI(ameCard, 'americano');
+  assert.equal(domMoves, 0, 'In-order stages must not be re-inserted on sync');
+  ameList.appendChild = origAppend;
+  ameList.insertBefore = origInsert;
+
   // Swap Americano via its single swap button and confirm stage DOM, icon order, middle swap row, & badges flip
   await ameCard.querySelector('.btn-preset-swap-stages').dispatchEvent('click');
   assert.equal(state.presetTweaks.americano.seq, 'water-first');

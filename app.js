@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.3';
+const APP_VERSION = '0.13.4';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -2280,13 +2280,12 @@ function orderTwoStageElements(listEl, coffeeEl, waterEl, coffeeBadgeEl, waterBa
     const first = waterFirst ? waterEl : coffeeEl;
     const second = waterFirst ? coffeeEl : waterEl;
     const swapRow = listEl.querySelector ? listEl.querySelector('.stage-swap-row') : null;
-    if (listEl.firstElementChild !== first) {
-      listEl.insertBefore(first, listEl.firstElementChild);
+    const desired = swapRow ? [first, swapRow, second] : [first, second];
+    const current = Array.from(listEl.children);
+    // Only touch the DOM when order is wrong: re-inserting a node mid-drag kills desktop range-slider drags.
+    if (desired.some((node, i) => current[i] !== node)) {
+      desired.forEach(node => listEl.appendChild(node));
     }
-    if (swapRow) {
-      listEl.insertBefore(swapRow, null);
-    }
-    listEl.insertBefore(second, null);
   }
   if (coffeeBadgeEl) coffeeBadgeEl.textContent = waterFirst ? '2nd' : '1st';
   if (waterBadgeEl) waterBadgeEl.textContent = waterFirst ? '1st' : '2nd';
