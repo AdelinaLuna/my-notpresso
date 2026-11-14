@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.4.5';
+const APP_VERSION = '0.4.6';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -1579,11 +1579,10 @@ function updateCupRangeHint() {
   const def = parseInt(opt.dataset.def, 10);
   el.inputCupVolume.min = min;
   el.inputCupVolume.max = max;
-  const cur = parseInt(el.inputCupVolume.value, 10);
-  const clamped = Math.max(min, Math.min(max, cur || def));
+  const clamped = Math.max(min, Math.min(max, def));
   el.inputCupVolume.value = clamped;
   el.valCupTargetMl.textContent = `${clamped} ml`;
-  el.hintCupRange.textContent = `Hardware allowed range: ${min} ml – ${max} ml (Factory default: ${def} ml)`;
+  el.hintCupRange.textContent = `Hardware allowed range: ${min} ml – ${max} ml (Default: ${def} ml)`;
 }
 
 // 14. Saved Library & Favorites UI
@@ -1981,20 +1980,37 @@ function restoreCuratedFavorites() {
 }
 
 // Machine Dial Quick Profiles
-function applyFactoryDefaultsProfile() {
-  el.selectCupTarget.value = '1'; // Espresso
-  el.inputCupVolume.value = 40;
-  el.valCupTargetMl.textContent = '40 ml';
+const DIAL_PROFILE_FACTORY = { 0: 25, 1: 40, 2: 110, 3: 200, 4: 25, 5: 125 };
+const DIAL_PROFILE_APP = { 0: 25, 1: 40, 2: 80, 3: 230, 4: 40, 5: 140 };
+
+function applyDialProfile(profileMap, activeBtn, toastText) {
+  Array.from(el.selectCupTarget.options).forEach((opt) => {
+    const idx = parseInt(opt.value, 10);
+    if (profileMap[idx] !== undefined) {
+      opt.dataset.def = String(profileMap[idx]);
+    }
+  });
+  [el.btnProfileFactoryDefaults, el.btnProfileAppCalibration].filter(Boolean).forEach((btn) => {
+    btn.classList.toggle('active-chip', btn === activeBtn);
+  });
   updateCupRangeHint();
-  showToast('Profile: Factory Defaults (25 / 40 / 110 / 200 / 25 / 125)');
+  if (toastText) showToast(toastText);
+}
+
+function applyFactoryDefaultsProfile() {
+  applyDialProfile(
+    DIAL_PROFILE_FACTORY,
+    el.btnProfileFactoryDefaults,
+    'Profile: Factory Defaults (25 / 40 / 110 / 200 / 25 / 125)'
+  );
 }
 
 function applyAppCalibrationProfile() {
-  el.selectCupTarget.value = '2'; // Lungo (80 ml in screenshot)
-  el.inputCupVolume.value = 80;
-  el.valCupTargetMl.textContent = '80 ml';
-  updateCupRangeHint();
-  showToast('Profile: App Calibration (25 / 40 / 80 / 230 / 40 / 140)');
+  applyDialProfile(
+    DIAL_PROFILE_APP,
+    el.btnProfileAppCalibration,
+    'Profile: App Calibration (25 / 40 / 80 / 230 / 40 / 140)'
+  );
 }
 
 // 14b. Live LED Telematics Decoder & Interactive Descaling Guide
@@ -2790,7 +2806,7 @@ window.addEventListener('DOMContentLoaded', () => {
   renderLibrary();
   renderFavoritesOnHome();
   updateCustomRecipeSummary();
-  updateCupRangeHint();
+  applyDialProfile(DIAL_PROFILE_APP, el.btnProfileAppCalibration);
   updateDescaleGuideUI();
   registerServiceWorker();
   log(`Notpresso Expert v${APP_VERSION} initialized (AuthKey: ${getStoredAuthKey()}).`, 'info');
