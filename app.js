@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.8.0';
+const APP_VERSION = '0.9.0';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -50,6 +50,15 @@ const ERROR_CATEGORIES = {
   3: 'ERROR',
   4: 'FATAL'
 };
+
+// First-Use / Post-Weekend System Rinse sequence per Manual pp. 7, 10 (3x Lungo + 2x Hot Water @ Hot/Medium temp)
+const SYSTEM_RINSE_STEPS = [
+  { step: 1, sizeCode: 2, tempCode: 0, label: 'Shot 1/5: Lungo Rinse (1/3 • Coffee Outlet)' },
+  { step: 2, sizeCode: 2, tempCode: 0, label: 'Shot 2/5: Lungo Rinse (2/3 • Coffee Outlet)' },
+  { step: 3, sizeCode: 2, tempCode: 0, label: 'Shot 3/5: Lungo Rinse (3/3 • Coffee Outlet)' },
+  { step: 4, sizeCode: 4, tempCode: 0, label: 'Shot 4/5: Hot Water Rinse (1/2 • Water Spout)' },
+  { step: 5, sizeCode: 4, tempCode: 0, label: 'Shot 5/5: Hot Water Rinse (2/2 • Water Spout)' }
+];
 
 // Default fallback BLE Auth Key (Override in Settings -> Auth Key; persisted in localStorage)
 const DEFAULT_AUTH_KEY = '82C15F832A864437';
@@ -272,7 +281,10 @@ const el = {
   btnWriteStockThreshold: document.getElementById('btnWriteStockThreshold'),
   selectErrorSlot: document.getElementById('selectErrorSlot'),
   btnReadErrorSlot: document.getElementById('btnReadErrorSlot'),
-  btnOpenOnboarding: document.getElementById('btnOpenOnboarding'),
+  badgeRinseStatus: document.getElementById('badgeRinseStatus'),
+  btnStartSystemRinse: document.getElementById('btnStartSystemRinse'),
+  btnStopSystemRinse: document.getElementById('btnStopSystemRinse'),
+  rinseStatusText: document.getElementById('rinseStatusText'),
   btnBleFactoryReset: document.getElementById('btnBleFactoryReset'),
   cardDescalingGuide: document.getElementById('cardDescalingGuide'),
   badgeDescalePhase: document.getElementById('badgeDescalePhase'),
@@ -984,11 +996,15 @@ function decodeCommandResponse(bytes) {
 
   const rejectCommand = (reason) => {
     log(`[06aa3a52 Command Rejected] ${reason} (${hex})`, 'err');
+    const wasRinse = !!(state.activeWorkflow && state.activeWorkflow.type === 'system-rinse');
     state.activeWorkflow = null;
     clearInterval(state.soakInterval);
     el.soakControlBox.classList.add('hidden');
     finishBrewTracking();
     el.brewModal.classList.add('hidden');
+    if (wasRinse) {
+      updateSystemRinseUI('Idle (5 Shots)', 'Ready to run automated 5-shot purge: Shots 1–3 Lungo (coffee outlet) → Shots 4–5 Hot Water (dedicated water spout).', false);
+    }
     if (el.ledTelematicsBanner) {
       el.ledTelematicsBanner.classList.remove('hidden', 'led-state-warn');
       el.ledTelematicsBanner.classList.add('led-state-err');
@@ -1027,6 +1043,7 @@ function onDisconnected() {
   clearInterval(state.soakInterval);
   if (el.soakControlBox) el.soakControlBox.classList.add('hidden');
   if (el.brewModal) el.brewModal.classList.add('hidden');
+  updateSystemRinseUI('Idle (5 Shots)', 'Ready to run automated 5-shot purge: Shots 1–3 Lungo (coffee outlet) → Shots 4–5 Hot Water (dedicated water spout).', false);
   state.characteristics.clear();
   updateConnectionUI();
   log('Disconnected from machine.', 'warn');
@@ -1373,6 +1390,14 @@ async function handleWorkflowStatusUpdate(prevState, newState, waterTankEmpty) {
     }
   }
 
+  // 4. If 5-Shot System Rinse finished current step (transitioned from BREWING/HEAT_UP back to READY=2):
+  if (wf && wf.type === 'system-rinse' && !wf.advancing) {
+    if ((prevState === 4 || prevState === 1) && newState === 2) {
+      await advanceOrFinishSystemRinse(wf);
+      return;
+    }
+  }
+
   // Standard brew progress tracking
   const mState = MACHINE_STATES[newState] || { isBusy: false };
   if (mState.isBusy && !state.isBrewing) {
@@ -1424,6 +1449,7 @@ async function readScheduledBrew() {
 }
 
 async function emergencyStop() {
+  const wasRinse = !!(state.activeWorkflow && state.activeWorkflow.type === 'system-rinse');
   state.activeWorkflow = null;
   clearInterval(state.soakInterval);
   el.soakControlBox.classList.add('hidden');
@@ -1434,10 +1460,81 @@ async function emergencyStop() {
     await writeBleCharacteristic(BLE_UUIDS.CHAR_COMMAND, stopPayload);
     finishBrewTracking();
     el.badgeScheduleStatus.textContent = 'Idle';
+    if (wasRinse) {
+      updateSystemRinseUI('Idle (5 Shots)', 'Ready to run automated 5-shot purge: Shots 1–3 Lungo (coffee outlet) → Shots 4–5 Hot Water (dedicated water spout).', false);
+    }
     showToast('Action cancelled.');
   } catch (err) {
     log(`Cancel error: ${err.message}`, 'err');
   }
+}
+
+function updateSystemRinseUI(badgeText, detailText, isRunning) {
+  if (el.badgeRinseStatus) el.badgeRinseStatus.textContent = badgeText;
+  if (el.rinseStatusText) el.rinseStatusText.textContent = detailText;
+  if (el.btnStartSystemRinse) el.btnStartSystemRinse.disabled = !!isRunning;
+  if (el.btnStopSystemRinse) el.btnStopSystemRinse.disabled = !isRunning;
+}
+
+async function startSystemRinseWorkflow() {
+  if (!state.isConnected) {
+    showToast('Please connect to the machine first!');
+    return;
+  }
+  if (state.sliderOpen) {
+    showToast('Close the capsule slider (with no capsule inside) before rinsing!');
+    return;
+  }
+  state.activeWorkflow = {
+    type: 'system-rinse',
+    stepIndex: 0,
+    totalSteps: SYSTEM_RINSE_STEPS.length,
+    advancing: false
+  };
+  log('Starting First-Use / Post-Weekend 5-Shot System Rinse (3x Lungo + 2x Hot Water)...', 'info');
+  await executeCurrentSystemRinseStep();
+}
+
+async function executeCurrentSystemRinseStep() {
+  const wf = state.activeWorkflow;
+  if (!wf || wf.type !== 'system-rinse') return;
+  const s = SYSTEM_RINSE_STEPS[wf.stepIndex];
+  if (!s) return;
+  wf.advancing = false;
+  updateSystemRinseUI(`Step ${s.step} / ${wf.totalSteps}`, `Running ${s.label}...`, true);
+  const payload = buildProgrammedBrewPayload(s.sizeCode, s.tempCode, 0);
+  log(`System Rinse [${s.step}/${wf.totalSteps}] ${s.label}: ${bytesToHex(payload)}`, 'tx');
+  try {
+    await writeBleCharacteristic(BLE_UUIDS.CHAR_COMMAND, payload);
+    startBrewTracking(`System Rinse (${s.step}/${wf.totalSteps})`, s.label, calculateBrewDuration(s.sizeCode));
+  } catch (err) {
+    log(`System rinse error at step ${s.step}: ${err.message}`, 'err');
+    state.activeWorkflow = null;
+    updateSystemRinseUI('Error', `System rinse halted at step ${s.step}: ${err.message}`, false);
+    showToast(`System rinse error: ${err.message}`);
+  }
+}
+
+async function advanceOrFinishSystemRinse(wf) {
+  if (!wf || wf.type !== 'system-rinse' || wf.advancing) return;
+  if (wf.stepIndex + 1 < SYSTEM_RINSE_STEPS.length) {
+    wf.advancing = true;
+    wf.stepIndex += 1;
+    log(`System Rinse step complete. Advancing to shot ${wf.stepIndex + 1}/${wf.totalSteps}...`, 'info');
+    await sleep(400);
+    await executeCurrentSystemRinseStep();
+    return;
+  }
+  state.activeWorkflow = null;
+  finishBrewTracking();
+  updateSystemRinseUI('Complete ✓', '5-shot System Rinse complete (3x Lungo + 2x Hot Water)! Empty drip tray & capsule bin.', false);
+  log('5-Shot System Rinse finished (3x Lungo + 2x Hot Water).', 'info');
+  showToast('5-Shot System Rinse complete! Empty drip tray.');
+}
+
+async function stopSystemRinseWorkflow() {
+  await emergencyStop();
+  updateSystemRinseUI('Stopped', 'System rinse cancelled by user.', false);
 }
 
 async function readDialCupSize() {
@@ -1682,7 +1779,7 @@ function startBrewTracking(title, subtitle, durationSec) {
   el.brewModal.classList.remove('hidden');
   el.brewProgressBar.style.width = '0%';
 
-  if (!state.activeWorkflow || state.activeWorkflow.type === 'two-stage-split') {
+  if (!state.activeWorkflow || state.activeWorkflow.type === 'two-stage-split' || state.activeWorkflow.type === 'system-rinse') {
     el.soakControlBox.classList.add('hidden');
   }
 
@@ -1717,6 +1814,10 @@ function startBrewTracking(title, subtitle, durationSec) {
       }
       if (wf && wf.type === 'two-stage-bloom' && wf.stage === 1 && !wf.soakStarted) {
         beginSoakCountdown(wf.waitSec, 300);
+        return;
+      }
+      if (wf && wf.type === 'system-rinse' && !wf.advancing) {
+        await advanceOrFinishSystemRinse(wf);
         return;
       }
       if (!wf || !wf.soakStarted) {
@@ -3213,10 +3314,8 @@ function initListeners() {
   if (el.btnReadStockThreshold) el.btnReadStockThreshold.addEventListener('click', readStockThreshold);
   if (el.btnWriteStockThreshold) el.btnWriteStockThreshold.addEventListener('click', writeStockThreshold);
   if (el.btnReadErrorSlot) el.btnReadErrorSlot.addEventListener('click', readErrorLogSlot);
-  el.btnOpenOnboarding.addEventListener('click', () => {
-    el.inputAuthKey.value = getStoredAuthKey();
-    el.settingsModal.classList.remove('hidden');
-  });
+  if (el.btnStartSystemRinse) el.btnStartSystemRinse.addEventListener('click', startSystemRinseWorkflow);
+  if (el.btnStopSystemRinse) el.btnStopSystemRinse.addEventListener('click', stopSystemRinseWorkflow);
   el.btnBleFactoryReset.addEventListener('click', sendBleFactoryReset);
 
   // LED Telematics Banner & Descaling Guide

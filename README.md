@@ -1,4 +1,4 @@
-# Notpresso Expert (EN 350.G) — v0.8.0
+# Notpresso Expert (EN 350.G) — v0.9.0
 
 <div align="center">
   <h3>Standalone Offline BLE Alternative for Nespresso Expert EN 350.G</h3>
@@ -15,7 +15,20 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.4.0 (Visual Descaling Guide, Live LED Telematics & In-App Manual)
+## 2. What's New in v0.5.0 – v0.9.0
+
+- **`v0.9.0` — 1-Tap System Rinse & Streamlined Machine/Settings Layout**:
+  - **Machine Diagnostics & Maintenance Promoted to Top of `Machine` Tab**: Quick access to Serial, Firmware, Capsule Stock, Descale Alert, Low-Stock Threshold, Fault History, and System Rinse without scrolling past cup-size calibration.
+  - **First-Use / Post-Weekend System Rinse (`3x Lungo + 2x Hot Water`, Manual pp. 7, 10)**: Automated 5-shot sequential rinse workflow with empty-chamber/slider safety check, Manual checklist (`>= 650 ml` container), live `06aa3a12` step auto-advancement (`Shots 1–3 Lungo` via coffee outlet -> `Shots 4–5 Hot Water` via dedicated water spout), and 1-tap `Stop`.
+  - **Settings Modal Factory Reset & Header Access**: Removed the duplicate onboarding button from the Machine tab (header ⚙️ icon already opens Settings & Pairing Key) and moved **⚠️ Send BLE Factory Reset (`03 07 00`)** to the bottom of the Settings modal.
+- **`v0.8.0` — Hardware Fault History (`06aa1930`) & Low-Stock Threshold (`06aa3a25`)**:
+  - Inspect stored error slots `0–9` via `06aa3a13` + `06aa3a23` (`errorNumber`, category `NONE/INFO/WARN/ERROR/FATAL`, `subCode`) and configure the `06aa3a25` low-capsule warning threshold.
+- **`v0.7.0` — BLE Capsule Stock Counter (`06aa3a15`) & Maintenance Fixes (`v0.7.1–v0.7.3`)**:
+  - Read/write hardware capsule stock (`0–1000`) or disable with `0xFFFF`, plus aligned Water Hardness defaults (`Level 3 — Hard`) and Manual p. 15 physical Factory Reset docs.
+- **`v0.5.0 – v0.6.0` — Per-Cup Temp Override, Drag Reorder & Expandable Home Presets**:
+  - Tappable expandable home preset cards (Hot Water first) with ad-hoc sliders, per-cup temperature override pills on saved recipes, and long-press drag reordering.
+
+### Core Platform Capabilities (v0.4.0 Foundation)
 
 `v0.4.0` adds interactive machine maintenance, real-time LED telematics, and built-in official documentation while preserving all `v0.3.0` and `v0.2.0` features:
 
@@ -104,11 +117,11 @@ If you want native Android BLE bonding (`createBond()`), background service resi
 
 ```text
 my-notpresso/
-├── index.html                # v0.8.0 Mobile-first Web Bluetooth PWA interface (5 tabs + Manual/Descale UI)
+├── index.html                # v0.9.0 Mobile-first Web Bluetooth PWA interface (5 tabs + System Rinse + Manual/Descale UI)
 ├── styles.css                # Dark Espresso & Crema Gold theme for Samsung S24 Ultra
-├── app.js                    # v0.8.0 BLE GATT engine, Fault History & Low-Stock Threshold, Expandable Presets, Per-Cup Temp Override, Drag Reorder, Capsule Stock Counter, LED Telematics, Descale Guide
+├── app.js                    # v0.9.0 BLE GATT engine, 5-Shot System Rinse, Fault History & Low-Stock Threshold, Expandable Presets, Per-Cup Temp Override, Drag Reorder, Capsule Stock Counter
 ├── manifest.json             # PWA configuration for Add-to-Homescreen
-├── sw.js                     # Offline caching Service Worker (v0.8.0)
+├── sw.js                     # Offline caching Service Worker (v0.9.0)
 ├── server.py                 # Optional local Python server with Wi-Fi IP display
 ├── scripts/
 │   └── extract_auth_key.py   # Extracts 16-char BLE Auth Key from nespresso.ab / SQLite DB

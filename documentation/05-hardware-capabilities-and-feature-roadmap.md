@@ -45,15 +45,17 @@ Base Connected Appliance Architecture (Service 06aa1910: Auth 06aa3a41, KeyState
 
 ---
 
-## 3. Potential Capabilities for Future App Enhancements
+## 3. Implemented Diagnostic & Future Workflow Capabilities (`v0.7.0–v0.9.0`)
 
-The following hardware capabilities are fully mapped in this documentation and can be added to future versions of the Web PWA or Native Android APK:
+The diagnostic subsystems below are now integrated into **Notpresso**, alongside future automation ideas built on top of `06aa1920`:
 
-1. **Hardware Fault History & Diagnostics Inspector (`Service 06aa1930`)**:
-   - By writing error slot index `[0x00]` (most recent) through `[0x09]` to `06aa3a13` and reading `06aa3a23` (`19 bytes`), the app can display a complete diagnostic log (`errorNumber` at `byte[0]`, `ErrorCategory` at `byte[1] >> 4`, and `errorSubCode` at `byte[2]`) whenever `errorPresent` (`Bit 3` of `06aa3a12`) is set.
-2. **Machine Identity & Firmware Inspector (`06aa3a21` & `06aa3a31`)**:
-   - Reading `06aa3a21` (`10 bytes`) and `06aa3a31` (`19 bytes`) allows the app to display the exact PCB Hardware Revision (`bytes[0..1]`), Main Controller Firmware Version (`bytes[4..5]`), BLE Radio Firmware Version (`bytes[6..7]`), and 19-character Serial Number.
-3. **Low-Capsule Warning Threshold & Sync Key (`06aa3a25` & `06aa3a35`)**:
-   - In addition to setting the remaining capsule count on `06aa3a15`, the user can configure the hardware low-capsule warning threshold (`06aa3a25`, `uint16 BE`) that triggers `Bit 16` (`capsuleStockLow`) in `06aa3a12`.
-4. **Wake-Up Morning Alarm with Pre-Warm**:
+1. **Hardware Fault History & Diagnostics Inspector (`Service 06aa1930` — Implemented in `v0.8.0`)**:
+   - Writes error slot index `[0x00]` (latest) through `[0x09]` to `06aa3a13` and reads `06aa3a23` (`19 bytes`), decoding `errorNumber` (`byte[0]`), `ErrorCategory` (`byte[1] >> 4`: `NONE/INFO/WARN/ERROR/FATAL`), and `errorSubCode` (`byte[2]`) in the **Machine Diagnostics & Maintenance** card.
+2. **Machine Identity & Firmware Inspector (`06aa3a21` & `06aa3a31` — Implemented in `v0.4.0+`)**:
+   - Reads `06aa3a21` (`10 bytes`) and `06aa3a31` (`19 bytes`) to display PCB Hardware Revision (`bytes[0..1]`), Main Controller Firmware Version (`bytes[4..5]`), BLE Radio Firmware Version (`bytes[6..7]`), and 19-character Serial Number.
+3. **Capsule Stock & Low-Stock Warning Threshold (`06aa3a15` & `06aa3a25` — Implemented in `v0.7.0 / v0.8.0`)**:
+   - Manages remaining capsule stock (`06aa3a15`, `0–1000` or `0xFFFF` disabled) and configures the hardware low-capsule warning threshold (`06aa3a25`, `uint16 BE`) that triggers `Bit 16` (`capsuleStockLow`) in `06aa3a12`. (`06aa3a35` Sync Key remains documented for future multi-phone sync.)
+4. **First-Use / Post-Weekend 5-Shot System Rinse Workflow (`3x Lungo + 2x Hot Water` — Implemented in `v0.9.0`)**:
+   - Located at the top of the **Machine** tab inside **Machine Diagnostics & Maintenance** per EN 350.G Manual pp. 7 & 10. Validates slider closure (`!state.sliderOpen`) and sequentially executes 3x Lungo (`0x02`, Medium/Hot `0x00`) through the coffee outlet followed by 2x Hot Water (`0x04`, Medium/Hot `0x00`) through the dedicated water spout, auto-advancing on `06aa3a12` `Brewing/Heating (4/1) -> Ready (2)` transitions (requiring a `>= 650 ml` catch container and drip-tray emptying on completion).
+5. **Wake-Up Morning Alarm with Pre-Warm (Future Idea)**:
    - Combining the hardware countdown timer (`03 05 07 04 <delay_sec> <temp> <id>`) with a `25 ml` Hot Water spout rinse (`0x04` or `0x07` water-only recipe) allows scheduling an automatic morning machine pre-warm and cup-rinse before pulling an espresso.
