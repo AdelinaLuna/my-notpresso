@@ -15,124 +15,60 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.13.7
+## 2. Features & Capabilities
 
-- **`v0.13.7` — Configurable 3s Cacheless Refresh Hold**: Replaced the hardcoded `5s` logo-hold refresh timeout with `LOGO_HOLD_REFRESH_SEC = 3` (driving tooltip, badge countdown, and timer).
+Notpresso Expert puts complete local control of your **EN 350.G** inside five streamlined tabs:
 
-- **`v0.13.6` — Offline-First Unified Dial Calibration Sync**: Active calibration profiles (`My App Calibration` by default, or `Factory Defaults`), `#selectCupTarget` option text (`Default <ml>ml`), Custom quick-chips, and Presets subtitles/volume labels now stay 100% synced everywhere without requiring a BLE connection first; saved `localStorage` values are no longer overwritten on boot.
+- **Presets & Two-Stage Brewing (`Presets` Tab)**:
+  - Instant 1-tap cards for **Hot Water** (`250 ml @ Max ~90°C` default), **Ristretto**, **Espresso**, **Lungo**, **Americano** (synced to rotary dial settings), and **Great Americano XL** (`160 ml Warm 80°C Water → 40 ml Max 90°C Coffee` default).
+  - Expand any card for live volume sliders (`15–130 ml` coffee, `25–300 ml` hot water), dial/limit tags prefixed inline (`(Lungo) 80 ml`, `(Hot Water) 230 ml`), per-stage `3x` temperature toggles (`Warm ~80°C`, `Hot ~85°C`, `Max ~90°C`), and a one-tap **`⇅ Swap Stage Order`** button (`Coffee → Water` vs. `Water → Coffee`). Distinct stage temperatures automatically run sequential 2-stage split brewing.
+  - **Post-Brew Window**: 10-second live countdown before auto-eject with 1-tap **`+15 ml Coffee`** and **`+25 ml Hot Water`** top-ups locked to your brew's temperature.
 
-- **`v0.13.5` — Personalized Dial & Preset Volume Labels**: Connect telemetry now reads all 6 rotary dial targets `[0..5]`, persists them in `localStorage` (`notpresso_machine_dial_v1`), updates Presets subtitles/defaults, and derives slider volume labels solely from your synced machine settings instead of hardcoded OEM values.
+- **Custom Recipe Builder & Scheduler (`Custom` Tab)**:
+  - Configure independent milliliter volumes (`0` or `15–130 ml` coffee + `0` or `25–300 ml` hot water, up to `430 ml` total), `±5 ml` fine-tune steppers, dynamic rotary-dial quick chips, custom stage ordering, and per-stage temperatures.
+  - Schedule **delayed hardware brews** via the machine's onboard timer (`06aa3a32`).
 
-- **`v0.13.4` — Desktop 2nd-Stage Slider Drag Fix**: Stage reordering now only touches the DOM when the order actually changes, so dragging the 2nd stage volume slider with a mouse no longer stops after one step.
+- **Bloom & Cleaning Capsule Lab (`Bloom/Clean` Tab)**:
+  - **Water-Pause In-Chamber Soak**: Leverages the hardware `300s` tank-empty clamp window to hold pre-infusion blooms (`15 ml → 10s`) or cleaning capsules (`40 ml → 60s`), auto-starting a countdown when paused with 1-tap resume for the remaining flush.
+  - **2-Stage BLE Macro**: Automates sequential `Phase 1 → Timed Wait → Phase 2` brews hands-free.
 
-- **`v0.13.3` — Stage-Order Emoji Sync & Prefix Volume Badges**:
-  - Synchronized two-stage preset card emoji icons (`☕💧` for `Coffee → Water`, `💧☕` for `Water → Coffee`) and subtitles with the selected stage order.
-  - Displayed known drink/limit tags **in front of** the `ml` badge on Presets sliders (e.g., `(Lungo) 110 ml`, `(Espresso) 40 ml`, `(Americano) 125 ml`, `(Hot Water) 250 ml`) so right-edge alignment stays fixed.
+- **Favorites & Recipe Library (`Library & Favorites` Tab)**:
+  - Pre-seeded with all **9 curated Nespresso app recipes** (plus `Restore Curated`), pinned **My Favorites** on the home screen, **per-cup temperature override pills (`80°` / `85°` / `90°` / `Split`)** without duplicating saved recipes, **long-press drag reordering**, **inline renaming**, and **edit-back-in-builder**.
 
-- **`v0.13.2` — Unified Two-Phase Cards, Dial-Synced Americano & Water-First XL**:
-  - Unified **Great Americano XL** styling with `Americano` (removed `highlight-card` and `Split-Temp` badge, standardized on `Brew` actions) since both now support per-stage 3x temperatures and stage swapping.
-  - Configured **Americano** to automatically adopt the machine's rotary dial targets `4` & `5` (or factory `25ml Coffee → 125ml Water @ Hot 85°C` fallback), and **Great Americano XL** to default to the reverse **`160ml Water (Warm 80°C) → 40ml Coffee (Max 90°C)`** order.
-  - Updated **Hot Water** preset defaults to **`250 ml` @ `Max ~90°C`**.
+- **Machine Calibration, Maintenance & Offline Diagnostics (`Machine` Tab & Header)**:
+  - **Rotary Dial Sync (`06aa3a14` / `06aa3a24`)**: Reads all 6 dial targets on connect, persists them in `localStorage` (`notpresso_machine_dial_v1`), and switches between **Factory Defaults** and **My App Calibration** profiles consistently across every tab even offline.
+  - **Live LED Telematics & Fault History**: Decodes the full 48-bit `MachineStatus` (`06aa3a12`) and `CommandResponse` (`06aa3a52`) bitfields (`Slider Open`, `Tank Empty`, `Bin Full`, `Descale`, `Obstacle`, `Low Stock`), plus 10-slot **Fault History** (`06aa1930`).
+  - **Capsule Stock, Standby & Hardness**: Read/write or disable **Capsule Stock Counter** (`06aa3a15`) and **Low-Stock Threshold** (`06aa3a25`), configure **Auto-Off Delay** (`9m` / `30m` / `2h` / `8h`) and **Water Hardness** (`Levels 0–4`, default `Level 3 Hard`) via `06aa3a44`, or send **BLE Factory Reset** (`03 07 00`) from Settings.
+  - **Interactive Maintenance**: **8-step Visual Descaling Guide** with simulated front panel & BLE prep, plus an automated **5-shot System Rinse** (`3x Lungo + 2x Hot Water`).
+  - **Offline PWA & Built-In Manual**: Cache-First Service Worker ([`sw.js`](sw.js)), configurable logo long-press (`3s`) cache reset, and built-in searchable Official Manual + embedded PDF viewer (`📖` header button).
 
-- **`v0.13.1` — Consistent Stage Brew Temperature UI & One-Tap Stage Swap**:
-  - Unified the two-phase stage `"Brew Temperature"` label and active chip styling (`Americano`, `Great Americano XL`, and Custom Builder) to match single-stage preset cards (`Lungo`).
-  - Replaced long-press stage drag-and-drop with a dedicated **`⇅ Swap Stage Order (1st ↔ 2nd)`** button between Coffee and Water stages so volume sliders never accidentally trigger reordering.
-
-- **`v0.13.0` — Two-Phase Per-Stage 3x Temperatures & Stage Reordering (`#18`)**:
-  - Removed the separate `"Split"` temperature button from two-phase preset cards (`Americano`, `Great Americano XL`) and the Custom Recipe builder in favour of **3x individual temperature selectors (`Warm ~80°C`, `Hot ~85°C`, `Max ~90°C`) on both Coffee and Water stages**, automatically choosing single-stage vs two-stage split brewing when stage temperatures differ.
-
-- **`v0.12.0` — 5-Second Logo Long-Press Cache Reset & Offline Cache-First SW**:
-  - Kept [sw.js](sw.js) **Cache-First** for instant offline launches while registering with `{ updateViaCache: 'none' }`.
-  - Added a **5-second hold** on the header logo icon with a live `5s → 1s` countdown overlay and version-badge indicator (`↻ 5s`) that unregisters Service Workers, clears Cache Storage (keeping `localStorage` keys/recipes intact), and reloads with `?refresh=`.
-
-- **`v0.11.0` — Automated Unit, DOM & Python Regression Test Suite**: Zero-dependency Node and Python suites (`tests/test_app.js`, `tests/test_python.py`) covering BLE codecs, payload framing, multi-stage/rinse/top-up workflows, Service Worker offline caching, `server.py` security, `extract_auth_key.py`, and historical bug fixes, plus single-source `APP_VERSION` propagation.
-
-- **`v0.10.0` — 10-Second Post-Brew Auto-Eject Countdown & 1-Tap Top-Up (Manual p. 11)**:
-  - Keeps the brew modal open for 10s after normal brew completion with a live countdown to automatic capsule ejection, dismissible anytime (`Done / Close`), plus `+15 ml Coffee` and `+25 ml Hot Water` top-up buttons locked to the completed brew's temperature.
-
-- **`v0.9.0` — 1-Tap System Rinse & Streamlined Machine/Settings Layout**:
-  - **Machine Diagnostics & Maintenance Promoted to Top of `Machine` Tab**: Quick access to Serial, Firmware, Capsule Stock, Descale Alert, Low-Stock Threshold, Fault History, and System Rinse without scrolling past cup-size calibration.
-  - **First-Use / Post-Weekend System Rinse (`3x Lungo + 2x Hot Water`, Manual pp. 7, 10)**: Automated 5-shot sequential rinse workflow with empty-chamber/slider safety check, Manual checklist (`>= 650 ml` container), live `06aa3a12` step auto-advancement (`Shots 1–3 Lungo` via coffee outlet -> `Shots 4–5 Hot Water` via dedicated water spout), and 1-tap `Stop`.
-  - **Settings Modal Factory Reset & Header Access**: Removed the duplicate onboarding button from the Machine tab (header ⚙️ icon already opens Settings & Pairing Key) and moved **⚠️ Send BLE Factory Reset (`03 07 00`)** to the bottom of the Settings modal.
-
-- **`v0.8.0` — Hardware Fault History (`06aa1930`) & Low-Stock Threshold (`06aa3a25`)**:
-  - Inspect stored error slots `0–9` via `06aa3a13` + `06aa3a23` (`errorNumber`, category `NONE/INFO/WARN/ERROR/FATAL`, `subCode`) and configure the `06aa3a25` low-capsule warning threshold.
-
-- **`v0.7.0` — BLE Capsule Stock Counter (`06aa3a15`) & Maintenance Fixes (`v0.7.1–v0.7.3`)**:
-  - Read/write hardware capsule stock (`0–1000`) or disable with `0xFFFF`, plus aligned Water Hardness defaults (`Level 3 — Hard`) and Manual p. 15 physical Factory Reset docs.
-
-- **`v0.5.0 – v0.6.0` — Per-Cup Temp Override, Drag Reorder & Expandable Home Presets**:
-  - Tappable expandable home preset cards (Hot Water first) with ad-hoc sliders, per-cup temperature override pills on saved recipes, and long-press drag reordering.
-
-### Core Platform Capabilities (v0.4.0 Foundation)
-
-`v0.4.0` adds interactive machine maintenance, real-time LED telematics, and built-in official documentation while preserving all `v0.3.0` and `v0.2.0` features:
-
-1. **8-Step Interactive Visual Descaling Guide & BLE Prep (`Machine` Tab)**:
-   - Live simulated front panel (`visSlider`, `visBrewBtn`, `visMaintLed`, `visBevDial`, `visTempDial`, `visOutlet`, `visTank`), "What to Do" / "What to Expect" cards, automatic step tracking from `06aa3a12` notifications, and 1-tap BLE prep (`prepareDescaleViaBle()`).
-2. **Live BLE LED Telematics Banner**:
-   - Real-time plain-text interpretation of the front panel LEDs from `06aa3a12` (`Descaling Needed`, `Water Tank Empty`, `Capsule Bin Full`, `Slider Open`, `Low Capsule Stock`, `Heating Up`, `Overheated`, `Settings Mode`) per Manual p. 21.
-3. **Built-In Official User Manual (`📖` Header Button)**:
-   - Embedded [`NespressoExpertEN350G.pdf`](documentation/NespressoExpertEN350G.pdf) viewer plus instant offline structured reader with search and section jump chips.
-4. **⭐ My Favorites & Suggestions (Home Presets Tab, v0.3.0)**:
-   - Displays your top favorite recipes right on the main home screen below the expandable quick-brew presets (`Hot Water` first, followed by coffee presets with per-drink ad-hoc volume/temp sliders in `v0.6.0`).
-   - 1-tap brew access, **per-cup temperature override (`80°` Warm / `85°` Hot / `90°` Max / `Split`)** without duplicating saved recipes (`v0.5.0`), and 1-tap edit button without needing to switch tabs.
-5. **Curated Nespresso App Favorites Pre-Seeded (v0.3.0)**:
-   - Includes all 9 custom recipes from the official Nespresso app:
-     - **Water Lungo Extra Hot** (`0 ml` Coffee + `270 ml` Water, Extra Hot ~90°C)
-     - **Water Lazy Hot Pots** (`0 ml` Coffee + `200 ml` Water, Extra Hot ~90°C)
-     - **Espresso Long Americano** (`40 ml` Coffee + `160 ml` Water, Extra Hot ~90°C, Coffee first)
-     - **Espresso Medium Americano** (`40 ml` Coffee + `120 ml` Water, Hot ~85°C, Coffee first)
-     - **Espresso Short Americano** (`40 ml` Coffee + `70 ml` Water, Warm ~80°C, Coffee first)
-     - **Ristretto Lungo Americano** (`25 ml` Coffee + `115 ml` Water, Hot ~85°C, Coffee first)
-     - **Ristretto Medium American** (`25 ml` Coffee + `85 ml` Water, Hot ~85°C, Coffee first)
-     - **Ristretto Short Americano** (`25 ml` Coffee + `55 ml` Water, Warm ~80°C, Coffee first)
-     - **Cleaning Capsules** (`130 ml` Coffee + `0 ml` Water, Extra Hot ~90°C)
-     - Plus **Great Americano XL (Split-Temp)** and multi-stage **Cleaning Capsule / Pre-Infusion Bloom** cycles.
-6. **Full Library Organization, Reordering & Renaming (v0.3.0)**:
-   - **Reordering**: Long-press and hold (`⋮⋮` handle or card) to drag items directly to any position in Favorites or Library (`v0.5.1`).
-   - **Renaming**: Inline ✏️ Rename modal for changing any recipe name anytime.
-   - **Edit / Tweak**: 🎛️ Edit button that loads any existing recipe back into the Custom or Bloom builder for tweaking.
-   - **Restore Curated**: 1-tap button to restore the Nespresso app suggestions if desired.
-7. **Named Custom Recipes & Cycles (v0.3.0)**:
-   - Direct recipe name input fields in both Custom Recipe (`inputCustomRecipeName`) and Bloom Lab (`inputBloomRecipeName`) builders before saving.
-8. **Physical Rotary Dial Cup-Size Calibration Profiles (`Machine` Tab, v0.3.0)**:
-   - **Factory Defaults (Optimal)**: Ristretto 25ml, Espresso 40ml, Lungo 110ml, Hot Water 200ml, Americano Coffee 25ml, Americano Water 125ml.
-   - **My App Calibration**: Replicates the calibrated machine settings (Ristretto 25ml, Espresso 40ml, Lungo 80ml, Hot Water 230ml, Americano Coffee 40ml, Americano Water 140ml = 180ml total).
-9. **Hardware Capabilities Preserved from v0.2.0**:
-   - Ingredient pour sequence (`Coffee → Water` vs. `Water → Coffee` Long Black).
-   - Full volumetric ranges: Coffee `0` or `15–130 ml` + Hot Water `0` or `25–300 ml` (up to `430 ml` combined).
-   - Split-Temperature two-stage brewing ("Great Americano XL": `40 ml` Max Temp Coffee + `160 ml` Warm Water).
-   - In-chamber water-pause soak lab (`BrewOperations.LONG_BREW_TIMEOUT = 300s` 5-minute pause window).
-   - Hardware countdown delayed brew scheduler (`06aa3a32`).
-   - Auto-off standby delay (`9m`, `30m`, `2h`, `8h`) & water hardness (`0–4`) via `06aa3a44`.
-   - Real-time 48-bit `MachineStatus` (`06aa3a12`) and `CommandResponse` (`06aa3a52`) telemetry decoding.
+> 📋 Looking for version history? See **[RELEASE_NOTES.md](RELEASE_NOTES.md)** for *"What's in it for me?"* upgrade summaries and the detailed per-version technical changelog.
 
 ---
 
 ## 3. Recovering Your Enrolled Auth Key Without Factory Resetting the Machine
 
 > [!TIP]
-> **Zero-Reset Auth Key Recovery (`adb backup` + [`scripts/extract_auth_key.py`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/scripts/extract_auth_key.py)):**
+> **Zero-Reset Auth Key Recovery (`adb backup` + [`scripts/extract_auth_key.py`](scripts/extract_auth_key.py)):**
 > You can extract your machine's existing pairing key directly from an unencrypted Android backup on a non-rooted phone in 10 seconds:
 > ```bash
 > adb backup -f nespresso.ab -noapk com.nespresso.activities
 > python scripts/extract_auth_key.py nespresso.ab --save-env
 > ```
-> See [`documentation/03-recovering-original-auth-key-without-reset.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/03-recovering-original-auth-key-without-reset.md) for the complete walkthrough and the 4-bit nibble-shift derivation (`32-char DB hash` → `16-char 0x8... BLE Auth Key`).
+> See [`documentation/03-recovering-original-auth-key-without-reset.md`](documentation/03-recovering-original-auth-key-without-reset.md) for the complete walkthrough and the 4-bit nibble-shift derivation (`32-char DB hash` → `16-char 0x8... BLE Auth Key`).
 
 ---
 
 ## 4. Technical Documentation (`documentation/`)
 
-All BLE GATT protocol details, bitfield specifications, and hardware state machines are documented in [`documentation/`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/README.md):
+All BLE GATT protocol details, bitfield specifications, and hardware state machines are documented in [`documentation/`](documentation/README.md):
 
-- **[`documentation/README.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/README.md)** — Master overview & architecture summary.
-- **[`documentation/01-ble-gatt-protocol-reference.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/01-ble-gatt-protocol-reference.md)** — Complete GATT UUID table, 48-bit `MachineStatus` (`06aa3a12`) bitfield, `CommandResponse` (`06aa3a52`) error subcodes, and command frames.
-- **[`documentation/02-pairing-and-authentication-internals.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/02-pairing-and-authentication-internals.md)** — BLE pairing, `TxPowerLevel` OS bond trigger, 4-bit nibble-shift Auth Key derivation, and factory-reset procedures.
-- **[`documentation/03-recovering-original-auth-key-without-reset.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/03-recovering-original-auth-key-without-reset.md)** — Step-by-step guide to extracting an existing pairing key from `.ab` backups or HCI snoop logs.
-- **[`documentation/04-custom-recipes-volumes-and-multi-stage-brewing.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/04-custom-recipes-volumes-and-multi-stage-brewing.md)** — Volumetric limits, ingredient ordering, split-temperature Americano orchestration, and cleaning capsule / bloom soaking.
-- **[`documentation/05-hardware-capabilities-and-feature-roadmap.md`](file:///c:/Users/mbord/wa/notpresso-alternative/my-notpresso/documentation/05-hardware-capabilities-and-feature-roadmap.md)** — Complete hardware subsystem inventory, cross-appliance compatibility, and future feature roadmap.
+- **[`documentation/README.md`](documentation/README.md)** — Master overview & architecture summary.
+- **[`documentation/01-ble-gatt-protocol-reference.md`](documentation/01-ble-gatt-protocol-reference.md)** — Complete GATT UUID table, 48-bit `MachineStatus` (`06aa3a12`) bitfield, `CommandResponse` (`06aa3a52`) error subcodes, and command frames.
+- **[`documentation/02-pairing-and-authentication-internals.md`](documentation/02-pairing-and-authentication-internals.md)** — BLE pairing, `TxPowerLevel` OS bond trigger, 4-bit nibble-shift Auth Key derivation, and factory-reset procedures.
+- **[`documentation/03-recovering-original-auth-key-without-reset.md`](documentation/03-recovering-original-auth-key-without-reset.md)** — Step-by-step guide to extracting an existing pairing key from `.ab` backups or HCI snoop logs.
+- **[`documentation/04-custom-recipes-volumes-and-multi-stage-brewing.md`](documentation/04-custom-recipes-volumes-and-multi-stage-brewing.md)** — Volumetric limits, ingredient ordering, split-temperature Americano orchestration, and cleaning capsule / bloom soaking.
+- **[`documentation/05-hardware-capabilities-and-feature-roadmap.md`](documentation/05-hardware-capabilities-and-feature-roadmap.md)** — Complete hardware subsystem inventory, cross-appliance compatibility, and future feature roadmap.
 
 ---
 
@@ -155,10 +91,11 @@ If you want native Android BLE bonding (`createBond()`), background service resi
 my-notpresso/
 ├── index.html                # Mobile-first Web Bluetooth PWA interface (5 tabs + System Rinse + Post-Brew Top-Up + Manual/Descale UI)
 ├── styles.css                # Dark Espresso & Crema Gold theme for Samsung S24 Ultra
-├── app.js                    # BLE GATT engine (`APP_VERSION` single source of truth), Post-Brew Top-Up, 5-Shot System Rinse, Fault History & Low-Stock Threshold, Expandable Presets, Per-Cup Temp Override, Drag Reorder, Capsule Stock Counter
+├── app.js                    # BLE GATT engine (`APP_VERSION` single source of truth), dial calibration sync, split-temp brews, rinse, stock/faults
 ├── manifest.json             # PWA configuration for Add-to-Homescreen
 ├── sw.js                     # Offline caching Service Worker (versioned via `sw.js?v=APP_VERSION`)
 ├── server.py                 # Optional local Python server with Wi-Fi IP display
+├── RELEASE_NOTES.md          # User-facing upgrade highlights ("What's in it for me?") & per-version technical changelog
 ├── scripts/
 │   └── extract_auth_key.py   # Extracts 16-char BLE Auth Key from nespresso.ab / SQLite DB
 ├── tests/
