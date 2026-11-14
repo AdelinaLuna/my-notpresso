@@ -15,7 +15,11 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.11.0
+## 2. What's New in v0.5.0 – v0.12.0
+
+- **`v0.12.0` — 5-Second Logo Long-Press Cache Reset & Offline Cache-First SW**:
+  - Kept [sw.js](sw.js) **Cache-First** for instant offline launches while registering with `{ updateViaCache: 'none' }`.
+  - Added a **5-second hold** on the header logo icon with a live `5s → 1s` countdown overlay and version-badge indicator (`↻ 5s`) that unregisters Service Workers, clears Cache Storage (keeping `localStorage` keys/recipes intact), and reloads with `?refresh=`.
 
 - **`v0.11.0` — Automated Unit, DOM & Python Regression Test Suite**: Zero-dependency Node and Python suites (`tests/test_app.js`, `tests/test_python.py`) covering BLE codecs, payload framing, multi-stage/rinse/top-up workflows, Service Worker offline caching, `server.py` security, `extract_auth_key.py`, and historical bug fixes, plus single-source `APP_VERSION` propagation.
 

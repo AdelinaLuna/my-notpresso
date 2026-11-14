@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.11.1';
+const APP_VERSION = '0.12.0';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -352,6 +352,8 @@ const el = {
   manualPdfPageTag: document.getElementById('manualPdfPageTag'),
   settingsModal: document.getElementById('settingsModal'),
   btnCloseSettings: document.getElementById('btnCloseSettings'),
+  btnLogoRefresh: document.getElementById('btnLogoRefresh'),
+  logoHoldCountdown: document.getElementById('logoHoldCountdown'),
   badgeAppVersion: document.getElementById('badgeAppVersion'),
   initLogEntry: document.getElementById('initLogEntry'),
   inputAuthKey: document.getElementById('inputAuthKey'),
@@ -3531,13 +3533,83 @@ function applyAppVersion() {
 
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).catch(() => {});
+    navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`, { updateViaCache: 'none' }).catch(() => {});
   }
+}
+
+let logoHoldInterval = null;
+let logoHoldRemaining = 0;
+
+async function forceAppCacheUpdate() {
+  if (el.badgeAppVersion) el.badgeAppVersion.textContent = '↻ Updating...';
+  if (el.logoHoldCountdown) el.logoHoldCountdown.textContent = '↻';
+  showToast('Clearing app cache & Service Worker — reloading...');
+  try {
+    if ('serviceWorker' in navigator && typeof navigator.serviceWorker.getRegistrations === 'function') {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if (typeof caches !== 'undefined' && typeof caches.keys === 'function') {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch (_) {}
+  const basePath = (window.location && window.location.pathname) ? window.location.pathname : './';
+  const targetUrl = `${basePath}?refresh=${Date.now()}`;
+  if (window.location && typeof window.location.replace === 'function') {
+    window.location.replace(targetUrl);
+  } else if (window.location && typeof window.location.reload === 'function') {
+    window.location.reload();
+  }
+}
+
+function startLogoHoldRefresh(e) {
+  if (e && e.button !== undefined && e.button !== 0) return;
+  if (logoHoldInterval) clearInterval(logoHoldInterval);
+  logoHoldRemaining = 5;
+  if (el.btnLogoRefresh) el.btnLogoRefresh.classList.add('is-holding');
+  if (el.logoHoldCountdown) {
+    el.logoHoldCountdown.textContent = '5s';
+    el.logoHoldCountdown.classList.remove('hidden');
+  }
+  if (el.badgeAppVersion) el.badgeAppVersion.textContent = '↻ 5s';
+
+  logoHoldInterval = setInterval(() => {
+    logoHoldRemaining -= 1;
+    if (logoHoldRemaining > 0) {
+      if (el.logoHoldCountdown) el.logoHoldCountdown.textContent = `${logoHoldRemaining}s`;
+      if (el.badgeAppVersion) el.badgeAppVersion.textContent = `↻ ${logoHoldRemaining}s`;
+    } else {
+      clearInterval(logoHoldInterval);
+      logoHoldInterval = null;
+      forceAppCacheUpdate();
+    }
+  }, 1000);
+}
+
+function cancelLogoHoldRefresh() {
+  if (!logoHoldInterval) return;
+  clearInterval(logoHoldInterval);
+  logoHoldInterval = null;
+  logoHoldRemaining = 0;
+  if (el.btnLogoRefresh) el.btnLogoRefresh.classList.remove('is-holding');
+  if (el.logoHoldCountdown) el.logoHoldCountdown.classList.add('hidden');
+  if (el.badgeAppVersion) el.badgeAppVersion.textContent = `v${APP_VERSION}`;
+}
+
+function initLogoHoldRefresh() {
+  if (!el.btnLogoRefresh) return;
+  el.btnLogoRefresh.addEventListener('contextmenu', (e) => e.preventDefault());
+  el.btnLogoRefresh.addEventListener('pointerdown', startLogoHoldRefresh);
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => {
+    el.btnLogoRefresh.addEventListener(ev, cancelLogoHoldRefresh);
+  });
 }
 
 // Boot
 window.addEventListener('DOMContentLoaded', () => {
   applyAppVersion();
+  initLogoHoldRefresh();
   initListeners();
   loadSavedRecipes();
   renderLibrary();

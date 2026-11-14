@@ -978,6 +978,61 @@ test('Structural Contract: UI layout & required IDs intact for overhaul readines
   assert.equal(SW_JS.includes(ver), false, 'sw.js must not hardcode APP_VERSION');
 });
 
+test('Feature [v0.12.0]: 5s logo long-press countdown & forceAppCacheUpdate purges SW and caches', async () => {
+  let unregistered = 0;
+  const deletedCaches = [];
+  let replacedUrl = null;
+
+  const h = createAppHarness({
+    navigator: {
+      serviceWorker: {
+        register: async () => {},
+        getRegistrations: async () => [{ unregister: async () => { unregistered++; return true; } }]
+      }
+    }
+  });
+  h.ctx.caches = {
+    keys: async () => ['notpresso-v0.11.0', 'notpresso-v0.12.0'],
+    delete: async (k) => { deletedCaches.push(k); return true; }
+  };
+  h.ctx.location = {
+    pathname: '/my-notpresso/',
+    replace: (u) => { replacedUrl = u; }
+  };
+
+  const el = h.getEl();
+  const ver = h.eval('APP_VERSION');
+
+  // Start hold -> shows 5s countdown, early release restores badge
+  h.ctx.startLogoHoldRefresh({ button: 0 });
+  assert.equal(el.btnLogoRefresh.classList.contains('is-holding'), true);
+  assert.equal(el.logoHoldCountdown.classList.contains('hidden'), false);
+  assert.equal(el.logoHoldCountdown.textContent, '5s');
+  assert.equal(el.badgeAppVersion.textContent, '↻ 5s');
+
+  h.ctx.cancelLogoHoldRefresh();
+  assert.equal(el.btnLogoRefresh.classList.contains('is-holding'), false);
+  assert.equal(el.logoHoldCountdown.classList.contains('hidden'), true);
+  assert.equal(el.badgeAppVersion.textContent, `v${ver}`);
+
+  // Hold full 5s -> ticks 4s..1s then purges SW, caches, and reloads with ?refresh=
+  h.ctx.startLogoHoldRefresh({ button: 0 });
+  const holdTimer = Array.from(h.activeIntervals.values()).pop();
+  holdTimer.fn();
+  assert.equal(el.logoHoldCountdown.textContent, '4s');
+  assert.equal(el.badgeAppVersion.textContent, '↻ 4s');
+  holdTimer.fn();
+  holdTimer.fn();
+  holdTimer.fn();
+  assert.equal(el.logoHoldCountdown.textContent, '1s');
+  holdTimer.fn();
+  await new Promise(r => setTimeout(r, 0));
+
+  assert.equal(unregistered, 1);
+  assert.deepEqual(deletedCaches, ['notpresso-v0.11.0', 'notpresso-v0.12.0']);
+  assert.match(replacedUrl, /^\/my-notpresso\/\?refresh=\d+$/);
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;
