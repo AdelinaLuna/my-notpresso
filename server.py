@@ -11,6 +11,7 @@ import socket
 import ssl
 import sys
 import os
+import urllib.parse
 
 PORT = 8443
 
@@ -25,9 +26,15 @@ def get_local_ip():
         return "127.0.0.1"
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def send_head(self):
+        decoded_path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
+        segments = [seg for seg in decoded_path.replace("\\", "/").split("/") if seg]
+        if any(seg.startswith(".") for seg in segments):
+            self.send_error(403, "Forbidden")
+            return None
+        return super().send_head()
+
     def end_headers(self):
-        # Enable PWA caching and security headers
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
