@@ -1,4 +1,4 @@
-# Notpresso Expert (EN 350.G) — v0.9.0
+# Notpresso Expert (EN 350.G) — v0.10.0
 
 <div align="center">
   <h3>Standalone Offline BLE Alternative for Nespresso Expert EN 350.G</h3>
@@ -15,8 +15,10 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.9.0
+## 2. What's New in v0.5.0 – v0.10.0
 
+- **`v0.10.0` — 10-Second Post-Brew Auto-Eject Countdown & 1-Tap Top-Up (Manual p. 11)**:
+  - Keeps the brew modal open for 10s after normal brew completion with a live countdown to automatic capsule ejection, dismissible anytime (`Done / Close`), plus `+15 ml Coffee` and `+25 ml Hot Water` top-up buttons locked to the completed brew's temperature.
 - **`v0.9.0` — 1-Tap System Rinse & Streamlined Machine/Settings Layout**:
   - **Machine Diagnostics & Maintenance Promoted to Top of `Machine` Tab**: Quick access to Serial, Firmware, Capsule Stock, Descale Alert, Low-Stock Threshold, Fault History, and System Rinse without scrolling past cup-size calibration.
   - **First-Use / Post-Weekend System Rinse (`3x Lungo + 2x Hot Water`, Manual pp. 7, 10)**: Automated 5-shot sequential rinse workflow with empty-chamber/slider safety check, Manual checklist (`>= 650 ml` container), live `06aa3a12` step auto-advancement (`Shots 1–3 Lungo` via coffee outlet -> `Shots 4–5 Hot Water` via dedicated water spout), and 1-tap `Stop`.
@@ -117,11 +119,11 @@ If you want native Android BLE bonding (`createBond()`), background service resi
 
 ```text
 my-notpresso/
-├── index.html                # v0.9.0 Mobile-first Web Bluetooth PWA interface (5 tabs + System Rinse + Manual/Descale UI)
+├── index.html                # v0.10.0 Mobile-first Web Bluetooth PWA interface (5 tabs + System Rinse + Post-Brew Top-Up + Manual/Descale UI)
 ├── styles.css                # Dark Espresso & Crema Gold theme for Samsung S24 Ultra
-├── app.js                    # v0.9.0 BLE GATT engine, 5-Shot System Rinse, Fault History & Low-Stock Threshold, Expandable Presets, Per-Cup Temp Override, Drag Reorder, Capsule Stock Counter
+├── app.js                    # v0.10.0 BLE GATT engine, Post-Brew Top-Up, 5-Shot System Rinse, Fault History & Low-Stock Threshold, Expandable Presets, Per-Cup Temp Override, Drag Reorder, Capsule Stock Counter
 ├── manifest.json             # PWA configuration for Add-to-Homescreen
-├── sw.js                     # Offline caching Service Worker (v0.9.0)
+├── sw.js                     # Offline caching Service Worker (v0.10.0)
 ├── server.py                 # Optional local Python server with Wi-Fi IP display
 ├── scripts/
 │   └── extract_auth_key.py   # Extracts 16-char BLE Auth Key from nespresso.ab / SQLite DB

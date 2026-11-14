@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.9.0';
+const APP_VERSION = '0.10.0';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -145,7 +145,10 @@ const state = {
   brewInterval: null,
   brewDurationSec: 30,
   brewStartTime: 0,
-  activeWorkflow: null, // null | 'two-stage-split' | 'water-pause-soak' | 'two-stage-bloom'
+  lastBrewTemp: 0,
+  postBrewInterval: null,
+  postBrewRemainingSec: 0,
+  activeWorkflow: null, // null | 'two-stage-split' | 'water-pause-soak' | 'two-stage-bloom' | 'system-rinse'
   workflowStage: 0,
   soakInterval: null,
   soakRemainingSec: 0,
@@ -318,6 +321,11 @@ const el = {
   soakTimeoutHint: document.getElementById('soakTimeoutHint'),
   btnTriggerSoakTimer: document.getElementById('btnTriggerSoakTimer'),
   btnResumeAfterSoak: document.getElementById('btnResumeAfterSoak'),
+  postBrewBox: document.getElementById('postBrewBox'),
+  postBrewTimerBadge: document.getElementById('postBrewTimerBadge'),
+  btnTopUpCoffee: document.getElementById('btnTopUpCoffee'),
+  btnTopUpWater: document.getElementById('btnTopUpWater'),
+  btnDismissPostBrew: document.getElementById('btnDismissPostBrew'),
   btnStopBrew: document.getElementById('btnStopBrew'),
 
   // Rename Modal
@@ -1000,7 +1008,7 @@ function decodeCommandResponse(bytes) {
     state.activeWorkflow = null;
     clearInterval(state.soakInterval);
     el.soakControlBox.classList.add('hidden');
-    finishBrewTracking();
+    finishBrewTracking({ immediate: true });
     el.brewModal.classList.add('hidden');
     if (wasRinse) {
       updateSystemRinseUI('Idle (5 Shots)', 'Ready to run automated 5-shot purge: Shots 1–3 Lungo (coffee outlet) → Shots 4–5 Hot Water (dedicated water spout).', false);
@@ -1041,6 +1049,7 @@ function onDisconnected() {
   state.activeWorkflow = null;
   clearInterval(state.brewInterval);
   clearInterval(state.soakInterval);
+  dismissPostBrewModal();
   if (el.soakControlBox) el.soakControlBox.classList.add('hidden');
   if (el.brewModal) el.brewModal.classList.add('hidden');
   updateSystemRinseUI('Idle (5 Shots)', 'Ready to run automated 5-shot purge: Shots 1–3 Lungo (coffee outlet) → Shots 4–5 Hot Water (dedicated water spout).', false);
@@ -1129,6 +1138,7 @@ async function brewPreset(drinkName, sizeCode, tempCode) {
     return;
   }
   state.activeWorkflow = null;
+  state.lastBrewTemp = tempCode & 0xFF;
   const payload = buildProgrammedBrewPayload(sizeCode, tempCode, 0);
   log(`Triggering ${drinkName} (ID: 0x0${sizeCode}, Temp: ${getTempLabel(tempCode)}): ${bytesToHex(payload)}`, 'tx');
 
@@ -1142,6 +1152,7 @@ async function brewPreset(drinkName, sizeCode, tempCode) {
 }
 
 async function sendSingleStageCustomBrew(coffeeMl, waterMl, tempCode, sequence, titleLabel) {
+  state.lastBrewTemp = tempCode & 0xFF;
   const recipePayload = buildSetRecipePayload(coffeeMl, waterMl, sequence);
   log(`writeRecipe [Coffee ${coffeeMl}ml, Water ${waterMl}ml, ${sequence}]: ${bytesToHex(recipePayload)}`, 'tx');
   await writeBleCharacteristic(BLE_UUIDS.CHAR_COMMAND, recipePayload);
@@ -1458,7 +1469,7 @@ async function emergencyStop() {
   log(`Sending Abort Action (03 06 01 02): ${bytesToHex(stopPayload)}`, 'tx');
   try {
     await writeBleCharacteristic(BLE_UUIDS.CHAR_COMMAND, stopPayload);
-    finishBrewTracking();
+    finishBrewTracking({ immediate: true });
     el.badgeScheduleStatus.textContent = 'Idle';
     if (wasRinse) {
       updateSystemRinseUI('Idle (5 Shots)', 'Ready to run automated 5-shot purge: Shots 1–3 Lungo (coffee outlet) → Shots 4–5 Hot Water (dedicated water spout).', false);
@@ -1526,7 +1537,7 @@ async function advanceOrFinishSystemRinse(wf) {
     return;
   }
   state.activeWorkflow = null;
-  finishBrewTracking();
+  finishBrewTracking({ immediate: true });
   updateSystemRinseUI('Complete ✓', '5-shot System Rinse complete (3x Lungo + 2x Hot Water)! Empty drip tray & capsule bin.', false);
   log('5-Shot System Rinse finished (3x Lungo + 2x Hot Water).', 'info');
   showToast('5-Shot System Rinse complete! Empty drip tray.');
@@ -1772,12 +1783,16 @@ function startBrewTracking(title, subtitle, durationSec) {
   state.isBrewing = true;
   state.brewDurationSec = durationSec;
   state.brewStartTime = Date.now();
+  clearInterval(state.postBrewInterval);
+  state.postBrewRemainingSec = 0;
 
   el.brewCupGraphic.textContent = '☕';
   el.brewModalTitle.textContent = title;
   el.brewModalSub.textContent = subtitle || 'Machine is running. Please keep cup under outlet...';
   el.brewModal.classList.remove('hidden');
   el.brewProgressBar.style.width = '0%';
+  if (el.postBrewBox) el.postBrewBox.classList.add('hidden');
+  if (el.btnStopBrew) el.btnStopBrew.classList.remove('hidden');
 
   if (!state.activeWorkflow || state.activeWorkflow.type === 'two-stage-split' || state.activeWorkflow.type === 'system-rinse') {
     el.soakControlBox.classList.add('hidden');
@@ -1827,15 +1842,75 @@ function startBrewTracking(title, subtitle, durationSec) {
   }, 250);
 }
 
-function finishBrewTracking() {
+function dismissPostBrewModal() {
+  clearInterval(state.postBrewInterval);
+  state.postBrewRemainingSec = 0;
+  if (el.postBrewBox) el.postBrewBox.classList.add('hidden');
+  if (el.btnStopBrew) el.btnStopBrew.classList.remove('hidden');
+  if (el.brewModal) el.brewModal.classList.add('hidden');
+}
+
+async function triggerPostBrewTopUp(kind) {
+  if (!state.isConnected) {
+    showToast('Please connect to the machine first!');
+    return;
+  }
+  clearInterval(state.postBrewInterval);
+  state.postBrewRemainingSec = 0;
+  if (el.postBrewBox) el.postBrewBox.classList.add('hidden');
+  if (el.btnStopBrew) el.btnStopBrew.classList.remove('hidden');
+
+  const temp = state.lastBrewTemp ?? 0;
+  try {
+    if (kind === 'water') {
+      await sendSingleStageCustomBrew(0, 25, temp, 'coffee-first', `Top-Up: +25 ml Hot Water (${getTempLabel(temp)})`);
+    } else {
+      await sendSingleStageCustomBrew(15, 0, temp, 'coffee-first', `Top-Up: +15 ml Coffee (${getTempLabel(temp)})`);
+    }
+  } catch (err) {
+    log(`Top-up error: ${err.message}`, 'err');
+    showToast(`Top-up error: ${err.message}`);
+  }
+}
+
+function finishBrewTracking({ immediate = false } = {}) {
   state.isBrewing = false;
   clearInterval(state.brewInterval);
+  clearInterval(state.postBrewInterval);
   el.brewProgressBar.style.width = '100%';
-  setTimeout(() => {
-    if (!state.activeWorkflow) {
-      el.brewModal.classList.add('hidden');
+
+  if (immediate || state.activeWorkflow || state.errorPresent || state.machineState === 6 || state.machineState === 8) {
+    state.postBrewRemainingSec = 0;
+    setTimeout(() => {
+      if (!state.activeWorkflow && state.postBrewRemainingSec === 0) {
+        dismissPostBrewModal();
+      }
+    }, 600);
+    return;
+  }
+
+  // Show 10-second pre-eject countdown & top-up controls (Manual p. 11)
+  state.postBrewRemainingSec = 10;
+  if (el.brewCupGraphic) el.brewCupGraphic.textContent = '✨';
+  if (el.brewModalTitle) el.brewModalTitle.textContent = 'Brew Complete — Auto-Eject in 10s';
+  if (el.brewModalSub) {
+    el.brewModalSub.textContent = `Temperature locked at ${getTempLabel(state.lastBrewTemp)} (Manual p. 11). Top up before capsule ejects:`;
+  }
+  if (el.soakControlBox) el.soakControlBox.classList.add('hidden');
+  if (el.btnStopBrew) el.btnStopBrew.classList.add('hidden');
+  if (el.postBrewBox) el.postBrewBox.classList.remove('hidden');
+  if (el.postBrewTimerBadge) el.postBrewTimerBadge.textContent = '10s';
+  if (el.brewModal) el.brewModal.classList.remove('hidden');
+
+  state.postBrewInterval = setInterval(() => {
+    state.postBrewRemainingSec = Math.max(0, state.postBrewRemainingSec - 1);
+    if (el.postBrewTimerBadge) el.postBrewTimerBadge.textContent = `${state.postBrewRemainingSec}s`;
+    if (el.brewModalTitle) el.brewModalTitle.textContent = `Brew Complete — Auto-Eject in ${state.postBrewRemainingSec}s`;
+    if (el.brewProgressBar) el.brewProgressBar.style.width = `${state.postBrewRemainingSec * 10}%`;
+    if (state.postBrewRemainingSec <= 0) {
+      dismissPostBrewModal();
     }
-  }, 600);
+  }, 1000);
 }
 
 function calculateBrewDuration(sizeCode) {
@@ -3295,6 +3370,9 @@ function initListeners() {
   });
   el.btnResumeAfterSoak.addEventListener('click', resumePhase2Extraction);
   el.btnStopBrew.addEventListener('click', emergencyStop);
+  if (el.btnTopUpCoffee) el.btnTopUpCoffee.addEventListener('click', () => triggerPostBrewTopUp('coffee'));
+  if (el.btnTopUpWater) el.btnTopUpWater.addEventListener('click', () => triggerPostBrewTopUp('water'));
+  if (el.btnDismissPostBrew) el.btnDismissPostBrew.addEventListener('click', dismissPostBrewModal);
 
   // Tab 5: Machine & Dial Config
   el.selectCupTarget.addEventListener('change', updateCupRangeHint);
