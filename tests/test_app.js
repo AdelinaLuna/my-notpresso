@@ -971,9 +971,9 @@ test('Structural Contract: UI layout & required IDs intact for overhaul readines
 
   const h = createAppHarness();
   const ver = h.eval('APP_VERSION');
-  assert.equal(ver, '0.11.0');
+  assert.match(ver, /^\d+\.\d+\.\d+$/);
   assert.equal(h.getEl().badgeAppVersion.textContent, `v${ver}`);
-  assert.match(h.getEl().settingsVersionTag.textContent, new RegExp(`v${ver}`));
+  assert.ok(INDEX_HTML.indexOf('id="badgeAppVersion"') < INDEX_HTML.indexOf('</header>'), 'Version badge sits in main header');
   assert.equal(INDEX_HTML.includes(ver), false, 'index.html must not hardcode APP_VERSION');
   assert.equal(SW_JS.includes(ver), false, 'sw.js must not hardcode APP_VERSION');
 });

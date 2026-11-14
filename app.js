@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.11.0';
+const APP_VERSION = '0.11.1';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -353,7 +353,6 @@ const el = {
   settingsModal: document.getElementById('settingsModal'),
   btnCloseSettings: document.getElementById('btnCloseSettings'),
   badgeAppVersion: document.getElementById('badgeAppVersion'),
-  settingsVersionTag: document.getElementById('settingsVersionTag'),
   initLogEntry: document.getElementById('initLogEntry'),
   inputAuthKey: document.getElementById('inputAuthKey'),
   btnSaveAuthKey: document.getElementById('btnSaveAuthKey'),
@@ -3527,7 +3526,6 @@ function initListeners() {
 // 17. Service Worker Registration & Version Propagation
 function applyAppVersion() {
   if (el.badgeAppVersion) el.badgeAppVersion.textContent = `v${APP_VERSION}`;
-  if (el.settingsVersionTag) el.settingsVersionTag.textContent = `Notpresso Expert v${APP_VERSION} • Offline BLE Controller`;
   if (el.initLogEntry) el.initLogEntry.textContent = `[System] Notpresso Expert v${APP_VERSION} ready to connect to EN 350.G`;
 }
 
