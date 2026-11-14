@@ -1,4 +1,4 @@
-# Notpresso Expert (EN 350.G) — v0.10.0
+# Notpresso Expert (EN 350.G)
 
 <div align="center">
   <h3>Standalone Offline BLE Alternative for Nespresso Expert EN 350.G</h3>
@@ -15,7 +15,9 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.10.0
+## 2. What's New in v0.5.0 – v0.11.0
+
+- **`v0.11.0` — Automated Unit, DOM & Python Regression Test Suite**: Zero-dependency Node and Python suites (`tests/test_app.js`, `tests/test_python.py`) covering BLE codecs, payload framing, multi-stage/rinse/top-up workflows, Service Worker offline caching, `server.py` security, `extract_auth_key.py`, and historical bug fixes, plus single-source `APP_VERSION` propagation.
 
 - **`v0.10.0` — 10-Second Post-Brew Auto-Eject Countdown & 1-Tap Top-Up (Manual p. 11)**:
   - Keeps the brew modal open for 10s after normal brew completion with a live countdown to automatic capsule ejection, dismissible anytime (`Done / Close`), plus `+15 ml Coffee` and `+25 ml Hot Water` top-up buttons locked to the completed brew's temperature.
@@ -119,15 +121,27 @@ If you want native Android BLE bonding (`createBond()`), background service resi
 
 ```text
 my-notpresso/
-├── index.html                # v0.10.0 Mobile-first Web Bluetooth PWA interface (5 tabs + System Rinse + Post-Brew Top-Up + Manual/Descale UI)
+├── index.html                # Mobile-first Web Bluetooth PWA interface (5 tabs + System Rinse + Post-Brew Top-Up + Manual/Descale UI)
 ├── styles.css                # Dark Espresso & Crema Gold theme for Samsung S24 Ultra
-├── app.js                    # v0.10.0 BLE GATT engine, Post-Brew Top-Up, 5-Shot System Rinse, Fault History & Low-Stock Threshold, Expandable Presets, Per-Cup Temp Override, Drag Reorder, Capsule Stock Counter
+├── app.js                    # BLE GATT engine (`APP_VERSION` single source of truth), Post-Brew Top-Up, 5-Shot System Rinse, Fault History & Low-Stock Threshold, Expandable Presets, Per-Cup Temp Override, Drag Reorder, Capsule Stock Counter
 ├── manifest.json             # PWA configuration for Add-to-Homescreen
-├── sw.js                     # Offline caching Service Worker (v0.10.0)
+├── sw.js                     # Offline caching Service Worker (versioned via `sw.js?v=APP_VERSION`)
 ├── server.py                 # Optional local Python server with Wi-Fi IP display
 ├── scripts/
 │   └── extract_auth_key.py   # Extracts 16-char BLE Auth Key from nespresso.ab / SQLite DB
+├── tests/
+│   ├── test_app.js           # Zero-dependency Node unit, DOM & bug-fix regression suite
+│   └── test_python.py        # Python unittest suite for server.py and extract_auth_key.py
 └── documentation/            # Complete reverse-engineered BLE protocol docs & NespressoExpertEN350G.pdf manual
+```
+
+### Running Regression Tests
+
+Run from the `my-notpresso/` directory (zero external packages required):
+
+```bash
+node tests/test_app.js
+python tests/test_python.py
 ```
 
 ---

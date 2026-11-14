@@ -1,9 +1,10 @@
-const CACHE_NAME = 'notpresso-v0.10.0';
+const SW_VERSION = (self.location && self.location.search && self.location.search.replace(/^\?v=/, '')) || 'app';
+const CACHE_NAME = `notpresso-v${SW_VERSION}`;
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=0.10.0',
-  './app.js?v=0.10.0',
+  './styles.css',
+  './app.js',
   './manifest.json',
   './documentation/NespressoExpertEN350G.pdf'
 ];

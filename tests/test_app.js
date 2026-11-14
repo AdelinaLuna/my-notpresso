@@ -1,0 +1,996 @@
+#!/usr/bin/env node
+/**
+ * Notpresso Expert — Automated Unit & Regression Test Suite
+ *
+ * Covers BLE protocol codecs, 48-bit telemetry decoding, payload framing,
+ * multi-stage / post-brew / rinse state machines, Service Worker caching,
+ * and every historical bug fix so UI overhauls cannot silently regress behavior.
+ *
+ * Run: node tests/test_app.js
+ */
+
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT_DIR = path.resolve(__dirname, '..');
+const INDEX_HTML = fs.readFileSync(path.join(ROOT_DIR, 'index.html'), 'utf8');
+const APP_JS = fs.readFileSync(path.join(ROOT_DIR, 'app.js'), 'utf8');
+const SW_JS = fs.readFileSync(path.join(ROOT_DIR, 'sw.js'), 'utf8');
+const DOC_PAIRING = fs.readFileSync(
+  path.join(ROOT_DIR, 'documentation/02-pairing-and-authentication-internals.md'),
+  'utf8'
+);
+
+function parseAttributes(attrStr) {
+  const attrs = {};
+  const re = /([a-zA-Z0-9_-]+)(?:=(?:"([^"]*)"|'([^']*)'))?/g;
+  let m;
+  while ((m = re.exec(attrStr)) !== null) {
+    const key = m[1];
+    const val = m[2] !== undefined ? m[2] : (m[3] !== undefined ? m[3] : '');
+    attrs[key] = val;
+  }
+  return attrs;
+}
+
+function createMockElement(tagName = 'div', attrs = {}) {
+  const listeners = new Map();
+  const classes = new Set((attrs.class || '').split(/\s+/).filter(Boolean));
+  const dataset = {};
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith('data-')) {
+      const camel = k.slice(5).replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
+      dataset[camel] = v;
+    }
+  }
+
+  const elem = {
+    tagName: tagName.toUpperCase(),
+    id: attrs.id || '',
+    type: attrs.type || '',
+    _value: attrs.value !== undefined ? String(attrs.value) : '',
+    get value() {
+      return this._value;
+    },
+    set value(v) {
+      this._value = v === null || v === undefined ? '' : String(v);
+    },
+    min: attrs.min || '',
+    max: attrs.max || '',
+    checked: Object.prototype.hasOwnProperty.call(attrs, 'checked'),
+    disabled: Object.prototype.hasOwnProperty.call(attrs, 'disabled'),
+    hidden: false,
+    textContent: attrs.textContent || '',
+    _innerHTML: '',
+    scrollTop: 0,
+    scrollHeight: 0,
+    style: {},
+    dataset,
+    children: [],
+    options: [],
+    _selectedIndex: 0,
+    parentNode: null,
+    classList: {
+      add(...names) { names.filter(Boolean).forEach(n => classes.add(n)); },
+      remove(...names) { names.filter(Boolean).forEach(n => classes.delete(n)); },
+      toggle(name, force) {
+        if (force === undefined) {
+          if (classes.has(name)) { classes.delete(name); return false; }
+          classes.add(name);
+          return true;
+        }
+        if (force) classes.add(name);
+        else classes.delete(name);
+        return !!force;
+      },
+      contains(name) { return classes.has(name); }
+    },
+    get className() {
+      return Array.from(classes).join(' ');
+    },
+    set className(val) {
+      classes.clear();
+      String(val || '').split(/\s+/).filter(Boolean).forEach(n => classes.add(n));
+    },
+    get innerHTML() {
+      return this._innerHTML;
+    },
+    set innerHTML(val) {
+      this._innerHTML = String(val);
+      if (val === '') {
+        this.children = [];
+      } else {
+        // Hydrate preset panel sliders/buttons when initPresetDrinkCards sets panel.innerHTML
+        const extra = [];
+        for (const cls of ['preset-coffee-slider', 'preset-coffee-val', 'preset-water-slider', 'preset-water-val', 'btn-preset-brew-tweaked', 'btn-preset-reset']) {
+          if (this._innerHTML.includes(cls)) extra.push(createMockElement('div', { class: cls }));
+        }
+        const tempBtnRe = /class="[^"]*preset-temp-btn[^"]*"[^>]*data-temp="([^"]*)"/g;
+        let tm;
+        while ((tm = tempBtnRe.exec(this._innerHTML)) !== null) {
+          extra.push(createMockElement('button', { class: 'preset-temp-btn', 'data-temp': tm[1] }));
+        }
+        if (extra.length) {
+          extra.forEach(c => { c.parentNode = this; });
+          this.children = extra;
+        }
+      }
+    },
+    get firstElementChild() {
+      return this.children[0] || null;
+    },
+    get selectedIndex() {
+      if (this.options.length > 0) {
+        const idx = this.options.findIndex(o => o.value === this.value);
+        return idx >= 0 ? idx : this._selectedIndex;
+      }
+      return this._selectedIndex;
+    },
+    set selectedIndex(idx) {
+      this._selectedIndex = idx;
+      if (this.options[idx]) this.value = this.options[idx].value;
+    },
+    appendChild(child) {
+      child.parentNode = this;
+      this.children.push(child);
+      return child;
+    },
+    removeChild(child) {
+      this.children = this.children.filter(c => c !== child);
+    },
+    insertBefore(child, ref) {
+      this.removeChild(child);
+      const idx = ref ? this.children.indexOf(ref) : -1;
+      child.parentNode = this;
+      if (idx === -1) this.children.push(child);
+      else this.children.splice(idx, 0, child);
+      return child;
+    },
+    addEventListener(type, fn) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(fn);
+    },
+    async dispatchEvent(type, extra = {}) {
+      const ev = {
+        type,
+        target: extra.target || elem,
+        currentTarget: elem,
+        stopPropagation() {},
+        preventDefault() {},
+        ...extra
+      };
+      for (const fn of (listeners.get(type) || [])) {
+        await fn(ev);
+      }
+    },
+    querySelector(sel) {
+      return this.querySelectorAll(sel)[0] || null;
+    },
+    querySelectorAll(sel) {
+      const results = [];
+      const parts = sel.split(',').map(s => s.trim());
+      const walk = (node) => {
+        for (const ch of (node.children || [])) {
+          if (parts.some(p => matchesSimpleSelector(ch, p))) results.push(ch);
+          walk(ch);
+        }
+      };
+      walk(elem);
+      return results;
+    },
+    closest(sel) {
+      const parts = sel.split(',').map(s => s.trim());
+      let cur = elem;
+      while (cur) {
+        if (parts.some(p => matchesSimpleSelector(cur, p))) return cur;
+        cur = cur.parentNode;
+      }
+      return null;
+    },
+    scrollIntoView() {},
+    setPointerCapture() {}
+  };
+  return elem;
+}
+
+function matchesSimpleSelector(el, sel) {
+  const token = sel.split(/\s+/).pop();
+  if (token.startsWith('.')) {
+    const [cls, bracket] = token.slice(1).split('[');
+    if (!el.classList || !el.classList.contains(cls)) return false;
+    if (bracket) {
+      const key = bracket.replace(/\]$/, '');
+      const camel = key.replace(/^data-/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+      return el.dataset && el.dataset[camel] !== undefined;
+    }
+    return true;
+  }
+  if (token.startsWith('#')) return el.id === token.slice(1);
+  return el.tagName === token.toUpperCase();
+}
+
+function createAppHarness(options = {}) {
+  const byId = new Map();
+  const rootGroups = new Map();
+
+  // Extract all id="..." tags from index.html
+  const tagRe = /<(input|select|button|div|span|p|small|main|h2|h3|h4|iframe|details)([^>]*)>/gi;
+  let m;
+  while ((m = tagRe.exec(INDEX_HTML)) !== null) {
+    const tag = m[1].toLowerCase();
+    const attrs = parseAttributes(m[2]);
+    if (!attrs.id) continue;
+    const elem = createMockElement(tag, attrs);
+    if (tag === 'input' && !attrs.value) elem.value = '0';
+    byId.set(attrs.id, elem);
+  }
+
+  // Extract <select> options cleanly so selectCupTarget / selectWaterHardness work realistically
+  const selectRe = /<select\b([^>]*)>([\s\S]*?)<\/select>/gi;
+  while ((m = selectRe.exec(INDEX_HTML)) !== null) {
+    const selAttrs = parseAttributes(m[1]);
+    const body = m[2];
+    const selEl = byId.get(selAttrs.id) || createMockElement('select', selAttrs);
+    selEl.options = [];
+    const optRe = /<option\b([^>]*)>([\s\S]*?)<\/option>/gi;
+    let om;
+    let firstSelected = null;
+    while ((om = optRe.exec(body)) !== null) {
+      const oAttrs = parseAttributes(om[1]);
+      const optEl = createMockElement('option', {
+        ...oAttrs,
+        textContent: om[2].replace(/<[^>]+>/g, '').trim()
+      });
+      selEl.appendChild(optEl);
+      selEl.options.push(optEl);
+      if (Object.prototype.hasOwnProperty.call(oAttrs, 'selected')) {
+        firstSelected = optEl.value;
+      }
+    }
+    if (selEl.options.length > 0) {
+      selEl.value = firstSelected !== null ? firstSelected : selEl.options[0].value;
+    }
+    if (selAttrs.id) byId.set(selAttrs.id, selEl);
+  }
+
+  // Hydrate repeatable selector collections needed by app.js
+  rootGroups.set('.nav-tab', ['tab-presets', 'tab-custom', 'tab-bloom', 'tab-library', 'tab-machine'].map(
+    (tab, i) => createMockElement('button', { class: `nav-tab${i === 0 ? ' active' : ''}`, 'data-tab': tab })
+  ));
+  rootGroups.set('.tab-pane', ['tab-presets', 'tab-custom', 'tab-bloom', 'tab-library', 'tab-machine'].map(
+    (id, i) => createMockElement('main', { id, class: `tab-pane${i === 0 ? ' active' : ''}` })
+  ));
+  rootGroups.set('.drink-card[data-drink]', ['hot-water', 'ristretto', 'espresso', 'lungo', 'americano', 'great-americano'].map(
+    (drink) => {
+      const card = createMockElement('div', { class: 'drink-card', 'data-drink': drink });
+      card.appendChild(createMockElement('div', { class: 'drink-card-main' }));
+      card.appendChild(createMockElement('button', { class: 'btn-preset-quick' }));
+      card.appendChild(createMockElement('div', { class: 'drink-expand-panel' }));
+      return card;
+    }
+  ));
+  rootGroups.set('.seq-btn-custom', [
+    createMockElement('button', { class: 'seq-btn-custom active', 'data-seq': 'coffee-first' }),
+    createMockElement('button', { class: 'seq-btn-custom', 'data-seq': 'water-first' })
+  ]);
+  rootGroups.set('#singleTempGroup .temp-btn-custom', ['1', '0', '2'].map(
+    t => createMockElement('button', { class: 'temp-btn-custom', 'data-temp': t })
+  ));
+  rootGroups.set('.temp-btn-coffee', ['1', '0', '2'].map(
+    t => createMockElement('button', { class: 'temp-btn-coffee', 'data-temp': t })
+  ));
+  rootGroups.set('.temp-btn-water', ['1', '0', '2'].map(
+    t => createMockElement('button', { class: 'temp-btn-water', 'data-temp': t })
+  ));
+  rootGroups.set('.temp-btn-bloom', ['1', '0', '2'].map(
+    t => createMockElement('button', { class: 'temp-btn-bloom', 'data-temp': t })
+  ));
+  rootGroups.set('#descaleStepsList .descale-step', Array.from({ length: 8 }, (_, i) => {
+    const step = createMockElement('div', { class: 'descale-step', 'data-step': String(i + 1) });
+    const title = createMockElement('strong', {});
+    title.textContent = `Step ${i + 1}`;
+    step.appendChild(title);
+    const small = createMockElement('small', {});
+    small.textContent = `Instruction ${i + 1}`;
+    step.appendChild(small);
+    return step;
+  }));
+  rootGroups.set('#manualReaderPane .manual-sec-card', ['prep', 'descaling', 'hardness'].map(
+    s => createMockElement('div', { class: 'manual-sec-card', 'data-manual-sec': s, textContent: s })
+  ));
+  rootGroups.set('.manual-jump-chip', ['all', 'descaling'].map(
+    s => createMockElement('button', { class: 'manual-jump-chip', 'data-sec': s, 'data-page': '1' })
+  ));
+
+  const storage = new Map();
+  if (options.initialStorage) {
+    for (const [k, v] of Object.entries(options.initialStorage)) storage.set(k, v);
+  }
+
+  const windowListeners = new Map();
+  let intervalIdSeq = 0;
+  const activeIntervals = new Map();
+  const pendingTimeouts = [];
+
+  const documentMock = {
+    getElementById(id) {
+      if (!byId.has(id)) byId.set(id, createMockElement('div', { id }));
+      return byId.get(id);
+    },
+    querySelectorAll(sel) {
+      if (rootGroups.has(sel)) return rootGroups.get(sel);
+      return [];
+    },
+    querySelector(sel) {
+      return this.querySelectorAll(sel)[0] || null;
+    },
+    createElement(tag) {
+      return createMockElement(tag);
+    },
+    addEventListener() {}
+  };
+
+  const context = {
+    console,
+    Date,
+    Math,
+    Uint8Array,
+    Array,
+    Map,
+    Set,
+    JSON,
+    Promise,
+    Error,
+    parseInt,
+    Number,
+    Boolean,
+    String,
+    RegExp,
+    crypto: globalThis.crypto,
+    alert() {},
+    confirm: () => (options.confirmResult !== undefined ? options.confirmResult : true),
+    setTimeout(fn) {
+      fn();
+      return 1;
+    },
+    clearTimeout() {},
+    setInterval(fn, ms) {
+      const id = ++intervalIdSeq;
+      activeIntervals.set(id, { fn, ms });
+      return id;
+    },
+    clearInterval(id) {
+      activeIntervals.delete(id);
+    },
+    navigator: options.navigator || {},
+    localStorage: {
+      getItem: (k) => (storage.has(k) ? storage.get(k) : null),
+      setItem: (k, v) => storage.set(k, String(v)),
+      removeItem: (k) => storage.delete(k)
+    },
+    document: documentMock,
+    addEventListener(type, fn) {
+      if (!windowListeners.has(type)) windowListeners.set(type, []);
+      windowListeners.get(type).push(fn);
+    },
+    window: null
+  };
+  context.window = context;
+  vm.createContext(context);
+  vm.runInContext(APP_JS, context);
+
+  // Trigger DOMContentLoaded boot listener unless caller opts out
+  if (!options.skipBoot) {
+    for (const fn of (windowListeners.get('DOMContentLoaded') || [])) fn();
+  }
+
+  return {
+    ctx: context,
+    storage,
+    doc: documentMock,
+    rootGroups,
+    activeIntervals,
+    pendingTimeouts,
+    eval(code) {
+      return vm.runInContext(code, context);
+    },
+    getState() {
+      return vm.runInContext('state', context);
+    },
+    getEl() {
+      return vm.runInContext('el', context);
+    }
+  };
+}
+
+const tests = [];
+function test(name, fn) {
+  tests.push({ name, fn });
+}
+
+// =========================================================================
+// SUITE 1: BLE Protocol Codecs, Bitfields & Payload Builders
+// =========================================================================
+
+test('Suite 1: Key normalization & 4-bit nibble-shift codec matches DB hash', () => {
+  const { ctx } = createAppHarness();
+  assert.equal(ctx.convertDbHash32ToBleKey16('02c15f832a8644375a264bd1fb3fb1e8'), '802C15F832A86443');
+  assert.equal(ctx.normalizeAuthKeyInput('a1b2c3d4e5f6071899aabbccddeeff00'), '8A1B2C3D4E5F6071');
+  assert.equal(ctx.normalizeAuthKeyInput('12:34:56:78:9a:bc:de:f0'), '823456789ABCDEF0');
+  assert.equal(ctx.normalizeAuthKeyInput('bad'), '82C15F832A864437');
+  const gen = ctx.generateValidNespressoKeyHex();
+  assert.match(gen, /^8[0-9A-F]{15}$/);
+});
+
+test('Suite 1: Big-endian selectBit and getBitBoolean match Android BitField spec', () => {
+  const { ctx } = createAppHarness();
+  // Byte 0: 0b0101_0100 (0x54) -> bits 1=1, 3=1, 5=1
+  // Byte 1: 0b0100_0100 (0x44) -> bit 9=1 (tray full), bits 12..15 = 4 (Brewing)
+  // Byte 2: 0b1000_0000 (0x80) -> bit 16 = 1 (stockLow)
+  const buf = new Uint8Array([0x54, 0x44, 0x80, 0x00, 0x00, 0x01]);
+  assert.equal(ctx.selectBit(buf, 1, 2), 2);
+  assert.equal(ctx.getBitBoolean(buf, 3), true);
+  assert.equal(ctx.getBitBoolean(buf, 5), true);
+  assert.equal(ctx.getBitBoolean(buf, 7), false);
+  assert.equal(ctx.getBitBoolean(buf, 9), true);
+  assert.equal(ctx.selectBit(buf, 12, 15), 4);
+  assert.equal(ctx.getBitBoolean(buf, 16), true);
+  assert.equal(ctx.getBitBoolean(buf, 47), true);
+});
+
+test('Suite 1: buildSetRecipePayload and buildProgrammedBrewPayload frame bytes cleanly', () => {
+  const { ctx } = createAppHarness();
+  assert.equal(ctx.bytesToHexNoSpaces(ctx.buildSetRecipePayload(40, 0, 'coffee-first')), '0110080000010028000000');
+  assert.equal(ctx.bytesToHexNoSpaces(ctx.buildSetRecipePayload(0, 200, 'coffee-first')), '01100800000200C8000000');
+  assert.equal(ctx.bytesToHexNoSpaces(ctx.buildSetRecipePayload(40, 160, 'coffee-first')), '01100800000100280200A0');
+  assert.equal(ctx.bytesToHexNoSpaces(ctx.buildSetRecipePayload(40, 160, 'water-first')), '01100800000200A0010028');
+  assert.equal(ctx.bytesToHexNoSpaces(ctx.buildProgrammedBrewPayload(0x05, 0x02, 900)), '03050704000003840205');
+});
+
+test('Suite 1: ZeroOrRangeValue snappers and fault/threshold decoders', () => {
+  const { ctx } = createAppHarness();
+  assert.equal(ctx.snapCoffeeVolume(0), 0);
+  assert.equal(ctx.snapCoffeeVolume(7), 0);
+  assert.equal(ctx.snapCoffeeVolume(8), 15);
+  assert.equal(ctx.snapCoffeeVolume(160), 130);
+  assert.equal(ctx.snapWaterVolume(12), 0);
+  assert.equal(ctx.snapWaterVolume(13), 25);
+  assert.equal(ctx.snapWaterVolume(350), 300);
+
+  assert.equal(ctx.parseStockThresholdBytes(new Uint8Array([0x01, 0x2C])), 300);
+  assert.deepEqual(
+    { ...ctx.parseFaultRecordBytes(new Uint8Array([0x09, 0x40, 0x1F]), 3) },
+    { slot: 3, errNum: 9, errCat: 4, category: 'FATAL', errSub: 0x1f, isEmpty: false, summary: 'Slot 3: #9 FATAL (sub 0x1f)' }
+  );
+  assert.equal(ctx.parseFaultRecordBytes(new Uint8Array([0x00, 0x00, 0x00]), 1).isEmpty, true);
+  assert.equal(ctx.escapeHtml('<script>"x"</script>'), '&lt;script&gt;&quot;x&quot;&lt;/script&gt;');
+});
+
+// =========================================================================
+// SUITE 2: Historical Bug-Fix Regression Tests
+// =========================================================================
+
+test('Regression [4acb892]: Auth handshake sends TxPower 0x01/0x00 only on onboarding', async () => {
+  const h = createAppHarness();
+  const state = h.getState();
+  const txs = [];
+  let keyStateResp = 0; // ABSENT -> needs onboarding
+  h.ctx.readBleCharacteristic = async (uuid) => {
+    if (uuid === h.eval('BLE_UUIDS.CHAR_AUTH_TYPE')) return new Uint8Array([keyStateResp]);
+    return null;
+  };
+  h.ctx.writeBleCharacteristic = async (uuid, bytes) => {
+    txs.push({ uuid: uuid.substring(4, 8), hex: h.ctx.bytesToHexNoSpaces(bytes) });
+  };
+  h.ctx.setStoredAuthKey('023456789ABCDEF1');
+
+  await h.ctx.performAuthHandshake(false);
+  assert.deepEqual(txs, [
+    { uuid: '3a61', hex: '01' },
+    { uuid: '3a41', hex: '823456789ABCDEF1' },
+    { uuid: '3a61', hex: '00' }
+  ]);
+
+  txs.length = 0;
+  keyStateResp = 2; // PRESENT -> session auth only
+  await h.ctx.performAuthHandshake(false);
+  assert.equal(state.pairingKeyStateByte, 2);
+  assert.deepEqual(txs, [{ uuid: '3a41', hex: '823456789ABCDEF1' }]);
+});
+
+test('Regression [#3 / 58ea3d8]: Command rejection clears modal/workflow immediately and bit 47 decodes obstacle', () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const el = h.getEl();
+  state.activeWorkflow = { type: 'two-stage-split', stage: 1 };
+  el.brewModal.classList.remove('hidden');
+
+  // 20-byte response: bytes[3]=0x24 (CONDITIONS_NOT_FULFILLED), bytes[4]=0x08 (Slider OPEN)
+  const rej = new Uint8Array(20);
+  rej[3] = 0x24;
+  rej[4] = 0x08;
+  h.ctx.decodeCommandResponse(rej);
+
+  assert.equal(state.activeWorkflow, null);
+  assert.equal(el.brewModal.classList.contains('hidden'), true);
+  assert.equal(el.postBrewBox.classList.contains('hidden'), true);
+  assert.equal(el.ledTelematicsBanner.classList.contains('led-state-err'), true);
+  assert.match(el.ledBannerDesc.textContent, /slider is OPEN/i);
+
+  // Bit 47 = 0x01 on byte 5 -> obstacleDetected
+  h.ctx.handleRawCharacteristicBytes(
+    h.eval('BLE_UUIDS.CHAR_MACHINE_STATUS'),
+    new Uint8Array([0x04, 0x02, 0x00, 0x00, 0x00, 0x01])
+  );
+  assert.equal(state.obstacleDetected, true);
+  assert.match(el.chipMachineState.textContent, /Obstacle/);
+  assert.equal(
+    h.ctx.describeLedTelematics({ stateCode: 2, obstacleDetected: true }).title,
+    'Maintenance LED Alert — Obstacle Detected'
+  );
+});
+
+test('Regression [#4 / d3d62dd]: syncCustomRecipeUI works and bloom edits update in-place', () => {
+  const h = createAppHarness();
+  const state = h.getState();
+  const el = h.getEl();
+
+  // Custom recipe edit
+  const customIdx = state.savedRecipes.findIndex(r => r.kind === 'custom' && r.splitTemp);
+  assert.ok(customIdx >= 0);
+  const customId = state.savedRecipes[customIdx].id;
+  h.ctx.editRecipeInCustomTab(customIdx);
+  assert.equal(state.editingRecipeId, customId);
+  assert.equal(el.chkSplitTemp.checked, true);
+  assert.equal(el.singleTempGroup.classList.contains('hidden'), true);
+  assert.equal(el.splitTempGroup.classList.contains('hidden'), false);
+  assert.equal(el.btnUpdateCustom.classList.contains('hidden'), false);
+
+  // Bloom recipe edit + save updates existing entry in place
+  const bloomIdx = state.savedRecipes.findIndex(r => r.kind === 'bloom');
+  assert.ok(bloomIdx >= 0);
+  const countBefore = state.savedRecipes.length;
+  const bloomId = state.savedRecipes[bloomIdx].id;
+  h.ctx.editRecipeInCustomTab(bloomIdx);
+  assert.equal(state.editingRecipeId, bloomId);
+  el.inputBloomRecipeName.value = 'Updated Clean Macro';
+  h.ctx.saveCurrentBloomRecipe();
+  assert.equal(state.savedRecipes.length, countBefore);
+  assert.equal(state.savedRecipes.find(r => r.id === bloomId).name, 'Updated Clean Macro');
+});
+
+test('Regression [#5 / 744387f]: Stage 2 triggers on (1->2) HEATING_UP->READY and respects +35s buffer', async () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const txs = [];
+  h.ctx.writeBleCharacteristic = async (uuid, bytes) => {
+    txs.push(h.ctx.bytesToHexNoSpaces(bytes));
+  };
+  state.activeWorkflow = {
+    type: 'two-stage-split',
+    stage: 1,
+    stage2Triggered: false,
+    stage2: { coffeeMl: 0, waterMl: 160, temp: 1, label: 'Stage 2/2: 160ml Water' }
+  };
+
+  // Transition 1 (Heating Up) -> 2 (Ready)
+  await h.ctx.handleWorkflowStatusUpdate(1, 2, false);
+  assert.equal(state.activeWorkflow, null);
+  assert.equal(txs.length, 2);
+  assert.equal(txs[1], '03050704000000000107'); // stage 2 warm water
+
+  // Verify startBrewTracking interval applies +35s workflow buffer & waits while machine isBusy
+  h.ctx.startBrewTracking('Test Stage 1', 'sub', 20);
+  state.activeWorkflow = {
+    type: 'two-stage-split',
+    stage: 1,
+    stage2Triggered: false,
+    stage2: { coffeeMl: 0, waterMl: 160, temp: 1, label: 'Stage 2/2' }
+  };
+  state.machineState = 4; // Brewing (isBusy=true)
+  state.brewStartTime = Date.now() - 100_000;
+  txs.length = 0;
+  const intervalEntry = Array.from(h.activeIntervals.values()).pop();
+  await intervalEntry.fn();
+  assert.equal(txs.length, 0, 'Must NOT trigger Stage 2 while machineState=4 isBusy');
+  state.machineState = 2; // Ready
+  state.brewStartTime = Date.now() - 30_000; // elapsed 30s < 20 + 35s buffer
+  await intervalEntry.fn();
+  assert.equal(txs.length, 0, 'Must NOT trigger Stage 2 before brewDurationSec + 35s buffer');
+});
+
+test('Regression [#7 / d6a608d]: resumePhase2Extraction dispatches phase2Ml - phase1Ml (min 15 ml) on water-pause', async () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const txs = [];
+  h.ctx.writeBleCharacteristic = async (uuid, bytes) => {
+    txs.push(h.ctx.bytesToHexNoSpaces(bytes));
+  };
+
+  // Water-pause soak: 130 - 40 = 90 ml (0x5A)
+  state.activeWorkflow = { type: 'water-pause-soak', phase1Ml: 40, phase2Ml: 130, tempCode: 2 };
+  await h.ctx.resumePhase2Extraction();
+  assert.equal(txs[0], '011008000001005A000000');
+
+  // Clamped minimum 15 ml (0x0F) when phase2Ml - phase1Ml < 15
+  txs.length = 0;
+  state.activeWorkflow = { type: 'water-pause-soak', phase1Ml: 50, phase2Ml: 55, tempCode: 0 };
+  await h.ctx.resumePhase2Extraction();
+  assert.equal(txs[0], '011008000001000F000000');
+
+  // Two-stage bloom sends full phase2Ml (130 ml = 0x82)
+  txs.length = 0;
+  state.activeWorkflow = { type: 'two-stage-bloom', phase1Ml: 40, phase2Ml: 130, tempCode: 2 };
+  await h.ctx.resumePhase2Extraction();
+  assert.equal(txs[0], '0110080000010082000000');
+});
+
+test('Regression [#8 / 196b4b9]: Selecting dial target resets input to default and profiles update defaults', () => {
+  const h = createAppHarness();
+  const el = h.getEl();
+
+  el.selectCupTarget.value = '2'; // Lungo: App calibration default = 80
+  h.ctx.updateCupRangeHint(true);
+  assert.equal(el.inputCupVolume.value, '80');
+  assert.equal(el.valCupTargetMl.textContent, '80 ml');
+
+  h.ctx.applyFactoryDefaultsProfile();
+  assert.equal(el.inputCupVolume.value, '110');
+  assert.equal(el.valCupTargetMl.textContent, '110 ml');
+
+  h.ctx.applyAppCalibrationProfile();
+  assert.equal(el.inputCupVolume.value, '80');
+});
+
+test('Regression [#1 / ce781af]: Slider updates UI/descale visual, preserves detailed schedule, disconnect cleans modal', () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const el = h.getEl();
+
+  // Slider open (0x00)
+  h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_SLIDER'), new Uint8Array([0x00]));
+  assert.equal(state.sliderOpen, true);
+  assert.equal(el.chipSliderState.textContent, 'Open');
+  assert.match(el.visSlider.textContent, /OPEN/);
+
+  // Detailed schedule from 06aa3a32 must NOT be overwritten by 06aa3a12 schedActive=true
+  h.ctx.handleRawCharacteristicBytes(
+    h.eval('BLE_UUIDS.CHAR_SCHEDULE'),
+    new Uint8Array([0x00, 0x00, 0x03, 0x84, 0x00, 0x01]) // 900s = 15m
+  );
+  assert.match(el.badgeScheduleStatus.textContent, /15m/);
+  // Set bit 27 (Byte 3 bit 3 => 0x10) on CHAR_MACHINE_STATUS
+  h.ctx.handleRawCharacteristicBytes(
+    h.eval('BLE_UUIDS.CHAR_MACHINE_STATUS'),
+    new Uint8Array([0x00, 0x02, 0x00, 0x10, 0x00, 0x00])
+  );
+  assert.match(el.badgeScheduleStatus.textContent, /15m/);
+
+  // onDisconnected clears active brew/rinse/modal state
+  state.isBrewing = true;
+  state.activeWorkflow = { type: 'system-rinse', stepIndex: 1 };
+  el.brewModal.classList.remove('hidden');
+  h.ctx.onDisconnected();
+  assert.equal(state.isConnected, false);
+  assert.equal(state.isBrewing, false);
+  assert.equal(state.activeWorkflow, null);
+  assert.equal(el.brewModal.classList.contains('hidden'), true);
+  assert.equal(el.badgeRinseStatus.textContent, 'Idle (5 Shots)');
+});
+
+test('Regression [#9 / b366de4]: enqueueGattOp serializes FIFO across rejections & connectBle awaits telemetry', async () => {
+  const events = [];
+  let releaseFirst;
+  const firstGate = new Promise(r => { releaseFirst = r; });
+
+  const mockChar = (label) => ({
+    async writeValueWithResponse() {
+      events.push(`start:${label}`);
+      if (label === 'w1') await firstGate;
+      if (label === 'wFail') throw new Error('gatt-err');
+      events.push(`end:${label}`);
+    },
+    async readValue() {
+      events.push(`read:${label}`);
+      return { buffer: new Uint8Array([2]).buffer };
+    },
+    async startNotifications() {},
+    addEventListener() {}
+  });
+
+  const mockSvc = {
+    async getCharacteristic(u) { return mockChar(u.substring(4, 8)); }
+  };
+  const mockDevice = {
+    name: 'Expert-Mock',
+    addEventListener() {},
+    gatt: {
+      async connect() {
+        return { async getPrimaryService() { return mockSvc; } };
+      }
+    }
+  };
+
+  const h = createAppHarness({
+    navigator: { bluetooth: { requestDevice: async () => mockDevice } }
+  });
+  const state = h.getState();
+
+  state.characteristics.set('06aa0001', mockChar('w1'));
+  state.characteristics.set('06aa0002', mockChar('wFail'));
+  state.characteristics.set('06aa0003', mockChar('r3'));
+
+  const p1 = h.ctx.writeBleCharacteristic('06aa0001', new Uint8Array([1]));
+  const p2 = h.ctx.writeBleCharacteristic('06aa0002', new Uint8Array([2])).catch(() => 'caught');
+  const p3 = h.ctx.readBleCharacteristic('06aa0003');
+  await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(events, ['start:w1']);
+  releaseFirst();
+  await p1;
+  assert.equal(await p2, 'caught');
+  const r3 = await p3;
+  assert.equal(r3[0], 2);
+  assert.deepEqual(events, ['start:w1', 'end:w1', 'start:wFail', 'read:r3']);
+
+  // Verify connectBle awaits readInitialTelemetry before resolving
+  let telemetryDone = false;
+  const origRead = h.ctx.readInitialTelemetry;
+  h.ctx.readInitialTelemetry = async () => {
+    await new Promise(r => setTimeout(r, 5));
+    telemetryDone = true;
+  };
+  await h.ctx.connectBle();
+  assert.equal(telemetryDone, true, 'connectBle must await readInitialTelemetry');
+  h.ctx.readInitialTelemetry = origRead;
+});
+
+test('Regression [#10 & #12]: No flutter_src / dead stubs; delegated listeners don’t duplicate; SW fallback checks navigate', async () => {
+  assert.equal(fs.existsSync(path.join(ROOT_DIR, 'flutter_src')), false);
+  const h = createAppHarness();
+  const state = h.getState();
+  const el = h.getEl();
+  assert.equal('isNativeAndroid' in state, false);
+  assert.equal('envSubtitle' in el, false);
+
+  h.ctx.renderLibrary();
+  h.ctx.renderLibrary();
+  h.ctx.renderFavoritesOnHome();
+  h.ctx.renderFavoritesOnHome();
+  assert.equal(el.libraryList.dataset.actionsBound, '1');
+  assert.equal(el.libraryList.dataset.dragBound, '1');
+  assert.equal(el.homeFavoritesList.dataset.actionsBound, '1');
+  assert.equal(el.homeFavoritesList.dataset.dragBound, '1');
+
+  // Verify Service Worker offline fallback behavior
+  const swListeners = {};
+  const swCtx = {
+    self: { addEventListener: (ev, fn) => { swListeners[ev] = fn; } },
+    caches: { match: async (req) => (req === './index.html' ? { ok: true, kind: 'html' } : undefined) },
+    fetch: async () => { throw new Error('offline'); },
+    Response: { error: () => ({ ok: false, kind: 'net-err' }) }
+  };
+  vm.createContext(swCtx);
+  vm.runInContext(SW_JS, swCtx);
+
+  let pNav;
+  await swListeners.fetch({ request: { mode: 'navigate' }, respondWith: p => { pNav = p; } });
+  assert.equal((await pNav).kind, 'html');
+  let pAsset;
+  await swListeners.fetch({ request: { mode: 'no-cors' }, respondWith: p => { pAsset = p; } });
+  assert.equal((await pAsset).kind, 'net-err');
+});
+
+test('Regression [#14]: Default water hardness Level 3 (Hard) and Manual p. 15 factory reset steps', () => {
+  const h = createAppHarness();
+  assert.equal(h.getState().waterHardnessLevel, 3);
+  assert.equal(h.getEl().selectWaterHardness.value, '3');
+  assert.equal(h.eval('WATER_HARDNESS_INFO')[3].cups, 1500);
+  assert.match(INDEX_HTML, /<option value="3" selected>Level 3 \(Hard/);
+  assert.match(DOC_PAIRING, /Brewing button for 6 seconds[\s\S]*?Lungo[\s\S]*?Temperature dial to maximum/);
+});
+
+// =========================================================================
+// SUITE 3: Core Feature & Workflow Tests (#13, #2, #16, #15, v0.5.0-v0.6.0)
+// =========================================================================
+
+test('Feature [#13]: Capsule stock counter R/W, clamp 0..1000, and 0xFFFF disable', async () => {
+  const h = createAppHarness();
+  const state = h.getState();
+  const el = h.getEl();
+  const txs = [];
+  state.isConnected = true;
+  h.ctx.writeBleCharacteristic = async (u, b) => txs.push({ u: u.substring(4, 8), hex: h.ctx.bytesToHexNoSpaces(b) });
+
+  h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_STOCK'), new Uint8Array([0x00, 0x00]));
+  assert.equal(state.capsuleStock, 0);
+  assert.equal(el.valStockCounter.textContent, '0 caps (LED ON)');
+
+  h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_STOCK'), new Uint8Array([0xFF, 0xFF]));
+  assert.equal(state.capsuleStock, null);
+  assert.equal(el.valStockCounter.textContent, 'Disabled');
+
+  el.inputStockCount.value = '1500'; // Should clamp to 1000 (0x03E8)
+  await h.ctx.writeCapsuleStock();
+  await h.ctx.disableCapsuleStock();
+  assert.deepEqual(txs, [
+    { u: '3a15', hex: '03E8' },
+    { u: '3a15', hex: 'FFFF' }
+  ]);
+});
+
+test('Feature [#2]: Low-stock threshold (06aa3a25) & Fault History (06aa1930)', async () => {
+  const h = createAppHarness();
+  const state = h.getState();
+  const el = h.getEl();
+  const log = [];
+  state.isConnected = true;
+  h.ctx.writeBleCharacteristic = async (u, b) => {
+    log.push(`tx:${u.substring(4, 8)}:${h.ctx.bytesToHexNoSpaces(b)}`);
+  };
+  h.ctx.readBleCharacteristic = async (u) => {
+    log.push(`rx:${u.substring(4, 8)}`);
+    return new Uint8Array([0x07, 0x30, 0x02]);
+  };
+
+  el.inputStockThreshold.value = '15';
+  await h.ctx.writeStockThreshold();
+  el.selectErrorSlot.value = '4';
+  await h.ctx.readErrorLogSlot();
+
+  assert.deepEqual(log, ['tx:3a25:000F', 'tx:3a13:04', 'rx:3a23']);
+  assert.equal(state.capsuleStockThreshold, 15);
+  assert.equal(state.lastErrorRecord.summary, 'Slot 4: #7 ERROR (sub 0x02)');
+});
+
+test('Feature [#16]: 5-Shot System Rinse validates slider, executes 3x Lungo + 2x Hot Water, supports stop', async () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const el = h.getEl();
+  const txs = [];
+  state.isConnected = true;
+  h.ctx.writeBleCharacteristic = async (u, b) => txs.push(h.ctx.bytesToHexNoSpaces(b));
+
+  // Must refuse when slider is open
+  state.sliderOpen = true;
+  await h.ctx.startSystemRinseWorkflow();
+  assert.equal(txs.length, 0);
+  assert.equal(state.activeWorkflow, null);
+
+  // Run full 5 shots when closed
+  state.sliderOpen = false;
+  await h.ctx.startSystemRinseWorkflow();
+  assert.equal(el.btnStartSystemRinse.disabled, true);
+  assert.equal(el.btnStopSystemRinse.disabled, false);
+
+  for (let i = 0; i < 5; i++) {
+    await h.ctx.handleWorkflowStatusUpdate(4, 2, false);
+  }
+
+  assert.deepEqual(txs, [
+    '03050704000000000002',
+    '03050704000000000002',
+    '03050704000000000002',
+    '03050704000000000004',
+    '03050704000000000004'
+  ]);
+  assert.equal(state.activeWorkflow, null);
+  assert.equal(el.badgeRinseStatus.textContent, 'Complete ✓');
+  assert.equal(el.btnStartSystemRinse.disabled, false);
+
+  // Stop mid-rinse sends abort frame 03 06 01 02
+  txs.length = 0;
+  await h.ctx.startSystemRinseWorkflow();
+  await h.ctx.stopSystemRinseWorkflow();
+  assert.equal(txs.at(-1), '03060102');
+  assert.equal(el.badgeRinseStatus.textContent, 'Stopped');
+});
+
+test('Feature [#15]: 10s post-brew auto-eject countdown & 1-tap top-up (+15ml Coffee / +25ml Water)', async () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const el = h.getEl();
+  const txs = [];
+  state.isConnected = true;
+  h.ctx.writeBleCharacteristic = async (u, b) => txs.push(h.ctx.bytesToHexNoSpaces(b));
+
+  await h.ctx.brewPreset('Espresso', 1, 2); // Max temp 0x02
+  h.ctx.finishBrewTracking();
+  assert.equal(state.postBrewRemainingSec, 10);
+  assert.equal(el.postBrewBox.classList.contains('hidden'), false);
+  assert.equal(el.btnStopBrew.classList.contains('hidden'), true);
+
+  // Tick timer down to 0
+  const postTimer = Array.from(h.activeIntervals.values()).pop();
+  for (let s = 0; s < 10; s++) postTimer.fn();
+  assert.equal(state.postBrewRemainingSec, 0);
+  assert.equal(el.brewModal.classList.contains('hidden'), true);
+
+  // +Coffee and +Water top-ups inherit locked temperature 0x02
+  txs.length = 0;
+  await h.ctx.triggerPostBrewTopUp('coffee');
+  assert.equal(txs[0], '011008000001000F000000');
+  assert.equal(txs[1], '03050704000000000207');
+
+  txs.length = 0;
+  await h.ctx.triggerPostBrewTopUp('water');
+  assert.equal(txs[0], '0110080000020019000000');
+  assert.equal(txs[1], '03050704000000000207');
+});
+
+test('Features [v0.5.0–v0.6.0]: Per-cup temp overrides, recipe reorder, and expandable preset tweaks', async () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const txs = [];
+  state.isConnected = true;
+  h.ctx.writeBleCharacteristic = async (u, b) => txs.push(h.ctx.bytesToHexNoSpaces(b));
+
+  // Find Great Americano split recipe in savedRecipes and override its cup temp to Warm (1)
+  const splitIdx = state.savedRecipes.findIndex(r => r.splitTemp === true);
+  assert.ok(splitIdx >= 0);
+  const key = h.ctx.getRecipeTempKey(state.savedRecipes[splitIdx], splitIdx);
+  state.recipeTempOverrides[key] = 1; // Override Split -> Warm ~80°C single stage
+  await h.ctx.executeSavedRecipe(splitIdx);
+  assert.equal(state.activeWorkflow, null, 'Temp override to 80°C runs single-stage instead of 2-stage split');
+  assert.equal(txs[1], '03050704000000000107');
+
+  // Reorder savedRecipes and verify persistence
+  const firstId = state.savedRecipes[0].id;
+  assert.equal(h.ctx.moveRecipeFromTo(0, 2), true);
+  assert.equal(state.savedRecipes[2].id, firstId);
+  const stored = JSON.parse(h.storage.get('notpresso_saved_recipes_v3'));
+  assert.equal(stored[2].id, firstId);
+
+  // Expandable preset: collapsed button uses factory volume (03 05 ... 01), tweaked volume uses custom (01 10 08 ...)
+  txs.length = 0;
+  await h.ctx.executePresetDrink('espresso', false);
+  assert.equal(txs.length, 1);
+  assert.equal(txs[0].slice(-2), '01');
+
+  txs.length = 0;
+  state.presetTweaks.espresso.coffeeMl = 55;
+  state.presetTweaks.espresso.temp = 2;
+  await h.ctx.executePresetDrink('espresso', true);
+  assert.equal(txs.length, 2);
+  assert.equal(txs[0], '0110080000010037000000');
+  assert.equal(txs[1], '03050704000000000207');
+});
+
+test('Structural Contract: UI layout & required IDs intact for overhaul readiness', () => {
+  const tabMachineIdx = INDEX_HTML.indexOf('<main id="tab-machine"');
+  const diagIdx = INDEX_HTML.indexOf('Machine Diagnostics & Maintenance');
+  const dialIdx = INDEX_HTML.indexOf('Physical Rotary Dial Cup Sizes');
+  const settingsIdx = INDEX_HTML.indexOf('<div id="settingsModal"');
+  const factoryBtnIdx = INDEX_HTML.indexOf('btnBleFactoryReset');
+  assert.ok(tabMachineIdx < diagIdx && diagIdx < dialIdx, 'Diagnostics card sits first in #tab-machine');
+  assert.ok(settingsIdx < factoryBtnIdx, 'Factory reset sits inside #settingsModal');
+  assert.equal(INDEX_HTML.includes('btnOpenOnboarding'), false);
+
+  const h = createAppHarness();
+  const ver = h.eval('APP_VERSION');
+  assert.equal(ver, '0.11.0');
+  assert.equal(h.getEl().badgeAppVersion.textContent, `v${ver}`);
+  assert.match(h.getEl().settingsVersionTag.textContent, new RegExp(`v${ver}`));
+  assert.equal(INDEX_HTML.includes(ver), false, 'index.html must not hardcode APP_VERSION');
+  assert.equal(SW_JS.includes(ver), false, 'sw.js must not hardcode APP_VERSION');
+});
+
+// Execute all tests sequentially
+let passed = 0;
+let failed = 0;
+for (const { name, fn } of tests) {
+  try {
+    await fn();
+    passed++;
+    console.log(`PASS  ${name}`);
+  } catch (err) {
+    failed++;
+    console.error(`FAIL  ${name}\n  -> ${err.stack || err.message}`);
+  }
+}
+
+console.log(`\nSummary: ${passed} passed, ${failed} failed (${tests.length} total)`);
+if (failed > 0) process.exit(1);
