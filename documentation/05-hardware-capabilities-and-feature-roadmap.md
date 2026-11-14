@@ -6,11 +6,11 @@ This document catalogs all 11 hardware subsystems exposed by the **Nespresso Exp
 
 ## 1. Complete Hardware Subsystems of the Nespresso Expert EN 350.G
 
-| # | Hardware Subsystem | GATT Service | Characteristics | Status in Notpresso `v0.2.0` |
+| # | Hardware Subsystem | GATT Service | Characteristics | Status in Notpresso `v0.4.0` |
 | :---: | :--- | :---: | :--- | :--- |
 | **1** | **Session Authentication** | `06aa1910` | `06aa3a41` (`8B` Write), `06aa3a51` (`1B` Read) | **Implemented** (Supports both 16-char `8...` BLE key and 32-char hash auto-derivation) |
 | **2** | **First-Time Key Onboarding** | `06aa1910` | `06aa3a61` (`TxLevel`), `06aa3a41`, `06aa3a51` | **Implemented** (Full OS-bond enrollment in `android-apk`; GATT write sequence in Web PWA) |
-| **3** | **Hardware & Firmware Identification** | `06aa1910` | `06aa3a21` (`10B` FW/HW Info), `06aa3a31` (`19B` Serial) | **Ready for UI Expansion** (Characteristics mapped; can be surfaced in a Machine Diagnostics modal) |
+| **3** | **Hardware & Firmware Identification** | `06aa1910` | `06aa3a21` (`10B` FW/HW Info), `06aa3a31` (`19B` Serial) | **Implemented** (Surfaced in Machine Diagnostics: `#valFirmware` and `#valSerial`) |
 | **4** | **Preset Beverage Extraction** | `06aa1920` | `06aa3a42` (`10B` Write), `06aa3a52` (`Response`) | **Implemented** (Ristretto `0x00`, Espresso `0x01`, Lungo `0x02`, Hot Water `0x04`, Americano `0x05` + 3 Temps) |
 | **5** | **Custom Volumetric Recipes** | `06aa1920` | `06aa3a42` (`11B` Recipe + `10B` Trigger `0x07`) | **Implemented** (`0` or `15–130 ml` Coffee, `0` or `25–300 ml` Water, `Coffee→Water` / `Water→Coffee`, Split-Temp 2-Stage) |
 | **6** | **Hardware Delayed / Scheduled Brew** | `06aa1920` | `06aa3a42` (`uint32` delay), `06aa3a32` (`6B` Read) | **Implemented** (Countdown scheduling & `06aa3a32` active schedule readback) |

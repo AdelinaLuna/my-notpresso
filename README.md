@@ -1,8 +1,8 @@
-# Notpresso Expert (EN 350.G) — v0.3.0
+# Notpresso Expert (EN 350.G) — v0.4.0
 
 <div align="center">
   <h3>Standalone Offline BLE Alternative for Nespresso Expert EN 350.G</h3>
-  <p><strong>Zero Cloud Accounts • Reorderable Favorites & Library • Split-Temp Custom Recipes • Rotary Dial Calibration • 100% Offline</strong></p>
+  <p><strong>Zero Cloud Accounts • Visual Descaling Guide • Live LED Telematics • In-App Manual • Reorderable Favorites & Library • Split-Temp Recipes • 100% Offline</strong></p>
 </div>
 
 ---
@@ -15,14 +15,20 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.3.0 (Favorites, Library Reordering & App Calibration)
+## 2. What's New in v0.4.0 (Visual Descaling Guide, Live LED Telematics & In-App Manual)
 
-`v0.3.0` incorporates the complete personal favorites and rotary dial calibration setup from the official companion app:
+`v0.4.0` adds interactive machine maintenance, real-time LED telematics, and built-in official documentation while preserving all `v0.3.0` and `v0.2.0` features:
 
-1. **⭐ My Favorites & Suggestions (Home Presets Tab)**:
+1. **8-Step Interactive Visual Descaling Guide & BLE Prep (`Machine` Tab)**:
+   - Live simulated front panel (`visSlider`, `visBrewBtn`, `visMaintLed`, `visBevDial`, `visTempDial`, `visOutlet`, `visTank`), "What to Do" / "What to Expect" cards, automatic step tracking from `06aa3a12` notifications, and 1-tap BLE prep (`prepareDescaleViaBle()`).
+2. **Live BLE LED Telematics Banner**:
+   - Real-time plain-text interpretation of the front panel LEDs from `06aa3a12` (`Descaling Needed`, `Water Tank Empty`, `Capsule Bin Full`, `Slider Open`, `Low Capsule Stock`, `Heating Up`, `Overheated`, `Settings Mode`) per Manual p. 21.
+3. **Built-In Official User Manual (`📖` Header Button)**:
+   - Embedded [`NespressoExpertEN350G.pdf`](documentation/NespressoExpertEN350G.pdf) viewer plus instant offline structured reader with search and section jump chips.
+4. **⭐ My Favorites & Suggestions (Home Presets Tab, v0.3.0)**:
    - Displays your top favorite recipes right on the main home screen below the rotary dial presets.
    - 1-tap brew access and 1-tap edit button without needing to switch tabs.
-2. **Curated Nespresso App Favorites Pre-Seeded**:
+5. **Curated Nespresso App Favorites Pre-Seeded (v0.3.0)**:
    - Includes all 9 custom recipes from the official Nespresso app:
      - **Water Lungo Extra Hot** (`0 ml` Coffee + `270 ml` Water, Extra Hot ~90°C)
      - **Water Lazy Hot Pots** (`0 ml` Coffee + `200 ml` Water, Extra Hot ~90°C)
@@ -34,17 +40,17 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
      - **Ristretto Short Americano** (`25 ml` Coffee + `55 ml` Water, Warm ~80°C, Coffee first)
      - **Cleaning Capsules** (`130 ml` Coffee + `0 ml` Water, Extra Hot ~90°C)
      - Plus **Great Americano XL (Split-Temp)** and multi-stage **Cleaning Capsule / Pre-Infusion Bloom** cycles.
-3. **Full Library Organization, Reordering & Renaming**:
+6. **Full Library Organization, Reordering & Renaming (v0.3.0)**:
    - **Reordering**: Move Up 🔼 and Move Down 🔽 buttons on every saved item to reorder your favorites.
    - **Renaming**: Inline ✏️ Rename modal for changing any recipe name anytime.
    - **Edit / Tweak**: 🎛️ Edit button that loads any existing recipe back into the Custom or Bloom builder for tweaking.
    - **Restore Curated**: 1-tap button to restore the Nespresso app suggestions if desired.
-4. **Named Custom Recipes & Cycles**:
+7. **Named Custom Recipes & Cycles (v0.3.0)**:
    - Direct recipe name input fields in both Custom Recipe (`inputCustomRecipeName`) and Bloom Lab (`inputBloomRecipeName`) builders before saving.
-5. **Physical Rotary Dial Cup-Size Calibration Profiles (`Machine` Tab)**:
+8. **Physical Rotary Dial Cup-Size Calibration Profiles (`Machine` Tab, v0.3.0)**:
    - **Factory Defaults (Optimal)**: Ristretto 25ml, Espresso 40ml, Lungo 110ml, Hot Water 200ml, Americano Coffee 25ml, Americano Water 125ml.
    - **My App Calibration**: Replicates the calibrated machine settings (Ristretto 25ml, Espresso 40ml, Lungo 80ml, Hot Water 230ml, Americano Coffee 40ml, Americano Water 140ml = 180ml total).
-6. **Hardware Capabilities Preserved from v0.2.0**:
+9. **Hardware Capabilities Preserved from v0.2.0**:
    - Ingredient pour sequence (`Coffee → Water` vs. `Water → Coffee` Long Black).
    - Full volumetric ranges: Coffee `0` or `15–130 ml` + Hot Water `0` or `25–300 ml` (up to `430 ml` combined).
    - Split-Temperature two-stage brewing ("Great Americano XL": `40 ml` Max Temp Coffee + `160 ml` Warm Water).
@@ -98,15 +104,15 @@ If you want native Android BLE bonding (`createBond()`), background service resi
 
 ```text
 my-notpresso/
-├── index.html                # v0.2.0 Mobile-first Web Bluetooth PWA interface (5 tabs)
+├── index.html                # v0.4.0 Mobile-first Web Bluetooth PWA interface (5 tabs + Manual/Descale UI)
 ├── styles.css                # Dark Espresso & Crema Gold theme for Samsung S24 Ultra
-├── app.js                    # v0.2.0 BLE GATT engine, Split-Temp & Bloom/Clean orchestrator
+├── app.js                    # v0.4.0 BLE GATT engine, LED Telematics, Descale Guide, Split-Temp & Bloom/Clean orchestrator
 ├── manifest.json             # PWA configuration for Add-to-Homescreen
-├── sw.js                     # Offline caching Service Worker (v0.2.0)
+├── sw.js                     # Offline caching Service Worker (v0.4.0)
 ├── server.py                 # Optional local Python server with Wi-Fi IP display
 ├── scripts/
 │   └── extract_auth_key.py   # Extracts 16-char BLE Auth Key from nespresso.ab / SQLite DB
-├── documentation/            # Complete reverse-engineered BLE protocol & SDK reference
+├── documentation/            # Complete reverse-engineered BLE protocol docs & NespressoExpertEN350G.pdf manual
 └── flutter_src/              # Reference Dart / Flutter BLE service implementation
 ```
 

@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.3.0';
+const APP_VERSION = '0.4.0';
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -121,11 +121,17 @@ const state = {
   // Telemetry state
   machineState: 2,
   waterTankEmpty: false,
+  capsuleContainerFull: false,
+  descalingNeeded: false,
+  waterHardnessLevel: 2,
   sliderOpen: false,
   pairingKeyStateByte: -1,
   capsuleStock: null,
   serialNumber: '--',
   firmwareVersion: '--',
+
+  descaleStep: 1,
+  descaleDone: false,
 
   savedRecipes: [],
   editingRecipeId: null,
@@ -144,6 +150,11 @@ const el = {
   chipMachineState: document.getElementById('chipMachineState'),
   chipSliderState: document.getElementById('chipSliderState'),
   chipPairingState: document.getElementById('chipPairingState'),
+  ledTelematicsBanner: document.getElementById('ledTelematicsBanner'),
+  ledBannerDot: document.getElementById('ledBannerDot'),
+  ledBannerTitle: document.getElementById('ledBannerTitle'),
+  ledBannerDesc: document.getElementById('ledBannerDesc'),
+  btnJumpToDescale: document.getElementById('btnJumpToDescale'),
 
   navTabs: document.querySelectorAll('.nav-tab'),
   tabPanes: document.querySelectorAll('.tab-pane'),
@@ -224,6 +235,26 @@ const el = {
   valDescaleStatus: document.getElementById('valDescaleStatus'),
   btnOpenOnboarding: document.getElementById('btnOpenOnboarding'),
   btnBleFactoryReset: document.getElementById('btnBleFactoryReset'),
+  cardDescalingGuide: document.getElementById('cardDescalingGuide'),
+  badgeDescalePhase: document.getElementById('badgeDescalePhase'),
+  btnBlePrepDescale: document.getElementById('btnBlePrepDescale'),
+  descalePrepStatus: document.getElementById('descalePrepStatus'),
+  descaleSteps: document.querySelectorAll('#descaleStepsList .descale-step'),
+  btnDescalePrevStep: document.getElementById('btnDescalePrevStep'),
+  btnDescaleNextStep: document.getElementById('btnDescaleNextStep'),
+  btnDescaleResetSteps: document.getElementById('btnDescaleResetSteps'),
+  visSlider: document.getElementById('visSlider'),
+  visBrewBtn: document.getElementById('visBrewBtn'),
+  visMaintLed: document.getElementById('visMaintLed'),
+  visBevDial: document.getElementById('visBevDial'),
+  visTempDial: document.getElementById('visTempDial'),
+  visOutlet: document.getElementById('visOutlet'),
+  visTank: document.getElementById('visTank'),
+  visTankLabel: document.getElementById('visTankLabel'),
+  visStepTitle: document.getElementById('visStepTitle'),
+  visBleStateTag: document.getElementById('visBleStateTag'),
+  visWhatToDo: document.getElementById('visWhatToDo'),
+  visWhatToExpect: document.getElementById('visWhatToExpect'),
 
   // Active Brew / Soak Modal
   brewModal: document.getElementById('brewModal'),
@@ -247,6 +278,19 @@ const el = {
 
   // Settings & Logs Modals
   btnSettings: document.getElementById('btnSettings'),
+  btnManual: document.getElementById('btnManual'),
+  btnOpenManualDescale: document.getElementById('btnOpenManualDescale'),
+  manualModal: document.getElementById('manualModal'),
+  btnCloseManual: document.getElementById('btnCloseManual'),
+  btnManualModeReader: document.getElementById('btnManualModeReader'),
+  btnManualModePdf: document.getElementById('btnManualModePdf'),
+  inputManualSearch: document.getElementById('inputManualSearch'),
+  manualJumpChips: document.querySelectorAll('.manual-jump-chip'),
+  manualReaderPane: document.getElementById('manualReaderPane'),
+  manualSecCards: document.querySelectorAll('#manualReaderPane .manual-sec-card'),
+  manualPdfPane: document.getElementById('manualPdfPane'),
+  manualPdfFrame: document.getElementById('manualPdfFrame'),
+  manualPdfPageTag: document.getElementById('manualPdfPageTag'),
   settingsModal: document.getElementById('settingsModal'),
   btnCloseSettings: document.getElementById('btnCloseSettings'),
   inputAuthKey: document.getElementById('inputAuthKey'),
@@ -708,10 +752,13 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     const waterTankEmpty = getBitBoolean(bytes, 7);
     const capsuleContainerFull = getBitBoolean(bytes, 9);
     const stateCode = selectBit(bytes, 12, 15);
+    const capsuleStockLow = bytes.length >= 4 ? getBitBoolean(bytes, 16) : false;
 
     const prevState = state.machineState;
     state.machineState = stateCode;
     state.waterTankEmpty = waterTankEmpty;
+    state.capsuleContainerFull = capsuleContainerFull;
+    state.descalingNeeded = descalingNeeded;
 
     if (bytes.length >= 4) {
       const stockCount = selectBit(bytes, 17, 26);
@@ -740,6 +787,17 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     el.chipPairingState.textContent = pairingState === 2
       ? (state.capsuleStock !== null && state.capsuleStock < 1023 ? `Auth OK • ${state.capsuleStock}` : 'Auth OK (2)')
       : `Unpaired (${pairingState})`;
+
+    updateLedTelematicsBanner({
+      stateCode,
+      descalingNeeded,
+      waterTankEmpty,
+      capsuleContainerFull,
+      sliderOpen: state.sliderOpen,
+      capsuleStockLow,
+      errorPresent
+    });
+    syncDescaleStepFromTelemetry(prevState, stateCode, waterTankEmpty, descalingNeeded);
 
     log(`[06aa3a12 Status] ${bytesToHex(bytes)} -> ${statusLabel}`, 'rx');
 
@@ -783,6 +841,7 @@ function handleRawCharacteristicBytes(uuid, bytes) {
       el.selectStandbyDelay.value = String(standbySec);
     }
     if (hardness >= 0 && hardness <= 4) {
+      state.waterHardnessLevel = hardness;
       el.selectWaterHardness.value = String(hardness);
     }
     log(`[06aa3a44 UserSettings] Standby=${standbySec}s (${Math.round(standbySec / 60)}m), WaterHardness=Level ${hardness}`, 'rx');
@@ -860,6 +919,7 @@ function updateConnectionUI() {
     el.deviceSubtext.textContent = 'Select your Expert EN 350.G';
     el.btnConnectText.textContent = 'Scanning...';
     el.telemetryRow.classList.add('hidden');
+    if (el.ledTelematicsBanner) el.ledTelematicsBanner.classList.add('hidden');
   } else {
     el.connDot.className = 'status-dot disconnected';
     el.connStatusText.textContent = 'Disconnected';
@@ -867,6 +927,7 @@ function updateConnectionUI() {
     el.btnConnect.className = 'btn btn-connect';
     el.btnConnectText.textContent = 'Connect';
     el.telemetryRow.classList.add('hidden');
+    if (el.ledTelematicsBanner) el.ledTelematicsBanner.classList.add('hidden');
   }
 }
 
@@ -1878,6 +1939,390 @@ function applyAppCalibrationProfile() {
   showToast('Profile: App Calibration (25 / 40 / 80 / 230 / 40 / 140)');
 }
 
+// 14b. Live LED Telematics Decoder & Interactive Descaling Guide
+const WATER_HARDNESS_INFO = {
+  0: { label: 'Level 0 (<5 fH)', cups: 4000 },
+  1: { label: 'Level 1 (>7 fH)', cups: 3000 },
+  2: { label: 'Level 2 (>13 fH)', cups: 2000 },
+  3: { label: 'Level 3 (>25 fH)', cups: 1500 },
+  4: { label: 'Level 4 (>38 fH)', cups: 1000 }
+};
+
+function describeLedTelematics({ stateCode, descalingNeeded, waterTankEmpty, capsuleContainerFull, sliderOpen, capsuleStockLow, errorPresent }) {
+  if (stateCode === 8 || errorPresent) {
+    return {
+      level: 'err', blink: true, showDescale: !!descalingNeeded,
+      title: 'Maintenance LED Alert — Hardware Error',
+      desc: 'Fault detected. Check capsule chamber/water tank or power-cycle machine.'
+    };
+  }
+  if (stateCode === 10) {
+    return {
+      level: 'err', blink: true, showDescale: false,
+      title: 'Maint LED ON • Brew OFF • Temp Fast Blink',
+      desc: 'Machine overheating or below 0°C — wait a few minutes to stabilize.'
+    };
+  }
+  if (stateCode === 6) {
+    return {
+      level: 'warn', blink: true, showDescale: true,
+      title: 'Ristretto Blink • Maint LED Steady ON',
+      desc: 'Descaling / Rinsing pump active. Press Brew anytime to pause.'
+    };
+  }
+  if (stateCode === 3) {
+    return {
+      level: 'warn', blink: true, showDescale: true,
+      title: 'Ristretto Blink • Maint LED Blinking',
+      desc: waterTankEmpty
+        ? 'Descaling paused — tank empty. Empty tray, rinse & refill 1.2 L fresh water, then press Brew.'
+        : 'Descaling Mode Ready / Paused — press Brew on machine to start or resume.'
+    };
+  }
+  if (stateCode === 5) {
+    return {
+      level: 'warn', blink: true, showDescale: true,
+      title: 'Both Dials Flashing — Settings Mode Active',
+      desc: 'Ristretto=Descale • Espresso=Empty System • Lungo=Reset • Americano=Hardness • Drop=Auto-Off • All=BT.'
+    };
+  }
+  if (waterTankEmpty || capsuleContainerFull) {
+    const reasons = [];
+    if (waterTankEmpty) reasons.push('water tank is empty');
+    if (capsuleContainerFull) reasons.push('capsule container is full');
+    return {
+      level: 'err', blink: false, showDescale: !!descalingNeeded,
+      title: 'Brew OFF • Maintenance LED Steady ON',
+      desc: `Action required: ${reasons.join(' and ')}.`
+    };
+  }
+  if (descalingNeeded) {
+    return {
+      level: 'warn', blink: true, showDescale: true,
+      title: 'Brew ON • Maintenance LED Slow Blinking',
+      desc: 'Descaling is required (~20 min cycle with 2 Nespresso descaling units).'
+    };
+  }
+  if (sliderOpen) {
+    return {
+      level: 'warn', blink: false, showDescale: false,
+      title: 'Capsule Slider OPEN',
+      desc: 'Slide closed before starting or scheduling any brew.'
+    };
+  }
+  if (capsuleStockLow) {
+    return {
+      level: 'warn', blink: false, showDescale: false,
+      title: 'Nespresso Front LED ON — Low Capsule Stock',
+      desc: 'Remaining capsule stock is at or below the configured alert threshold.'
+    };
+  }
+  if (stateCode === 1) {
+    return {
+      level: 'ok', blink: true, showDescale: false,
+      title: 'Lights Blinking — Heating Up (~25–30s)',
+      desc: 'Thermoblock warming; steady lights indicate ready.'
+    };
+  }
+  if (stateCode === 4) {
+    return {
+      level: 'ok', blink: true, showDescale: false,
+      title: 'Brewing in Progress',
+      desc: 'Extraction active. Keep cup under outlet until complete.'
+    };
+  }
+  if (stateCode === 7) {
+    return {
+      level: 'warn', blink: true, showDescale: false,
+      title: 'Steaming Out / Emptying System',
+      desc: 'Purging internal circuit (machine remains locked 10 min after emptying).'
+    };
+  }
+  if (stateCode === 9) {
+    return {
+      level: 'ok', blink: false, showDescale: !!descalingNeeded,
+      title: 'LEDs Off — Standby / OFF Mode',
+      desc: 'Machine is OFF. Hold Brew 6s for Settings Mode or turn dial/press Brew to wake.'
+    };
+  }
+  return {
+    level: 'ok', blink: false, showDescale: false,
+    title: 'Steady Lights — Machine is Ready',
+    desc: 'All sensors normal. Ready to brew.'
+  };
+}
+
+function updateLedTelematicsBanner(statusObj) {
+  if (!el.ledTelematicsBanner) return;
+  const info = describeLedTelematics(statusObj);
+  el.ledTelematicsBanner.classList.remove('hidden', 'led-state-warn', 'led-state-err');
+  if (info.level === 'warn') el.ledTelematicsBanner.classList.add('led-state-warn');
+  if (info.level === 'err') el.ledTelematicsBanner.classList.add('led-state-err');
+
+  el.ledBannerDot.className = `led-dot led-${info.level}${info.blink ? ' led-blink' : ''}`;
+  el.ledBannerTitle.textContent = info.title;
+  el.ledBannerDesc.textContent = info.desc;
+  el.btnJumpToDescale.classList.toggle('hidden', !info.showDescale);
+}
+
+const DESCALE_STEPS_DATA = {
+  1: {
+    title: 'Step 1 of 8 — Empty Tray & Capsule Bin',
+    bleTag: '06aa3a12: READY / STANDBY',
+    brewLed: 'Brew LED: ON', brewClass: 'vis-led-on',
+    maintLed: 'Maint: Slow Blink', maintClass: 'vis-led-warn vis-led-blink',
+    bevDial: 'Any', bevBlink: false,
+    tempDial: 'Any',
+    outlet: 'Tray & Bin Emptied',
+    tankLabel: 'Empty 0%', tankPct: 0, tankClass: '',
+    todo: 'Remove and empty the drip tray and used capsule container, reinsert them, and push the capsule slider fully closed.',
+    expect: 'Machine can be ON or OFF; if ON with descalingNeeded, Brew LED stays ON and Maintenance LED blinks slowly (Bit 5 = 1, Bit 46 = 1).'
+  },
+  2: {
+    title: 'Step 2 of 8 — Mix Descaling Solution',
+    bleTag: 'waterTankEmpty: 0',
+    brewLed: 'Brew LED: ON', brewClass: 'vis-led-on',
+    maintLed: 'Maint: Slow Blink', maintClass: 'vis-led-warn vis-led-blink',
+    bevDial: 'Any', bevBlink: false,
+    tempDial: 'Any',
+    outlet: 'No Flow',
+    tankLabel: 'Descaler MAX', tankPct: 100, tankClass: 'tank-acid',
+    todo: 'Pour 2 pouches of Nespresso liquid descaler into the water tank, fill with potable water up to MAX (~1.1–1.2 L), and seat the tank.',
+    expect: 'Water tank empty bit clears (0); tank is full of descaling solution ready to prime.'
+  },
+  3: {
+    title: 'Step 3 of 8 — Place 1.2 L Container & Turn OFF',
+    bleTag: 'state = 9 (POWER_SAVE)',
+    brewLed: 'Brew LED: OFF', brewClass: '',
+    maintLed: 'Maint LED: OFF', maintClass: '',
+    bevDial: 'Any', bevBlink: false,
+    tempDial: '0 (OFF) ←',
+    outlet: 'Container >= 1.2 L',
+    tankLabel: 'Descaler 100%', tankPct: 100, tankClass: 'tank-acid',
+    todo: 'Place a container (minimum 1.2 L / 41 oz) under the coffee and hot water outlets. Turn the Temperature dial anti-clockwise to 0.',
+    expect: 'Lights blink for 5 seconds, then all machine LEDs switch OFF into Standby (06aa3a12 state = 9 POWER_SAVE).'
+  },
+  4: {
+    title: 'Step 4 of 8 — Enter Descaling Mode (Handshake)',
+    bleTag: 'state = 5 -> 3 (DESCALING_READY)',
+    brewLed: 'Hold 6s -> Confirm', brewClass: 'vis-led-blink',
+    maintLed: 'Maint: Wait', maintClass: 'vis-led-warn',
+    bevDial: '☕ Ristretto', bevBlink: true,
+    tempDial: 'High (I) ✓',
+    outlet: 'Ready >= 1.2 L',
+    tankLabel: 'Descaler 100%', tankPct: 100, tankClass: 'tank-acid',
+    todo: '1) Hold Brew 6s (both dials flash). 2) Select Ristretto + press Brew. 3) Turn Temp dial to High (I) + press Brew to confirm (Low O cancels).',
+    expect: 'Both dials flash in Settings Mode (state = 5), then only Ristretto blinks (state = 3 DESCALING_READY). Once confirmed with High (I), mode is locked.'
+  },
+  5: {
+    title: 'Step 5 of 8 — Run Descaling Pass (Acid)',
+    bleTag: 'state = 6 (DESCALING)',
+    brewLed: 'Press to Pause', brewClass: 'vis-led-on',
+    maintLed: 'Maint: STEADY ON', maintClass: 'vis-led-warn',
+    bevDial: '☕ Ristretto', bevBlink: true,
+    tempDial: 'High (I)',
+    outlet: '💧 Acid Flowing',
+    tankLabel: 'Draining...', tankPct: 45, tankClass: 'tank-acid',
+    todo: 'Press Brew to start. If machine pauses and Maintenance LED blinks, empty tray/container, replace, and press Brew until tank empties.',
+    expect: 'Ristretto blinks and Maintenance LED stays steady ON (state = 6) as acid alternates between coffee and hot water spouts, then pauses with Maintenance LED blinking on empty tank.'
+  },
+  6: {
+    title: 'Step 6 of 8 — Rinse Tank, Tray & Support',
+    bleTag: 'state = 3 + waterEmpty = 1',
+    brewLed: 'Paused', brewClass: 'vis-led-warn',
+    maintLed: 'Maint: BLINKING', maintClass: 'vis-led-warn vis-led-blink',
+    bevDial: '☕ Ristretto', bevBlink: true,
+    tempDial: 'Locked',
+    outlet: 'Wash & Empty',
+    tankLabel: 'Rinse 0%', tankPct: 0, tankClass: '',
+    todo: 'Remove the empty water tank, drip tray, and cup support. Rinse all three thoroughly with fresh tap water to remove acid residue.',
+    expect: 'Machine waits in paused descaling state with Ristretto blinking and Maintenance LED blinking (state = 3, waterTankEmpty = 1).'
+  },
+  7: {
+    title: 'Step 7 of 8 — Refill 1.2 L Fresh Potable Water',
+    bleTag: 'state = 3 (DESCALING_READY)',
+    brewLed: 'Ready for Rinse', brewClass: 'vis-led-blink',
+    maintLed: 'Maint: BLINKING', maintClass: 'vis-led-warn vis-led-blink',
+    bevDial: '☕ Ristretto', bevBlink: true,
+    tempDial: 'Locked',
+    outlet: 'Empty Cont. Placed',
+    tankLabel: 'Fresh 1.2 L', tankPct: 100, tankClass: 'tank-fresh',
+    todo: 'Fill the rinsed water tank with at least 1.2 L (41 oz) fresh potable water, seat it, and place the emptied container back under the outlet.',
+    expect: 'waterTankEmpty clears (0); Ristretto icon keeps blinking while waiting for Brew press to start the final rinse.'
+  },
+  8: {
+    title: 'Step 8 of 8 — Run Rinse Cycle & Auto-Off',
+    bleTag: 'state = 6 -> 9 (POWER_SAVE)',
+    brewLed: 'Rinsing -> OFF', brewClass: 'vis-led-on',
+    maintLed: 'Steady -> OFF', maintClass: 'vis-led-on',
+    bevDial: '☕ Ristretto', bevBlink: true,
+    tempDial: 'Auto OFF',
+    outlet: '💧 Clear Rinse',
+    tankLabel: 'Fresh -> 0%', tankPct: 30, tankClass: 'tank-fresh',
+    todo: 'Press Brew to start rinsing until the tank empties, wait for automatic shut-off, then empty the drip tray.',
+    expect: 'Ristretto blinks and Maintenance LED stays steady ON during rinse, then machine turns OFF automatically (state = 9, descalingNeeded = 0). If Maint LED still blinks, < 1.2 L was added — repeat Steps 7–8.'
+  }
+};
+
+function updateDescaleGuideUI() {
+  if (!el.descaleSteps) return;
+  el.descaleSteps.forEach(stepEl => {
+    const num = parseInt(stepEl.dataset.step, 10);
+    stepEl.classList.toggle('done-step', state.descaleDone ? true : num < state.descaleStep);
+    stepEl.classList.toggle('active-step', !state.descaleDone && num === state.descaleStep);
+  });
+  if (el.badgeDescalePhase) {
+    el.badgeDescalePhase.textContent = state.descaleDone ? 'Done ✓' : `Step ${state.descaleStep} / 8 (~20 min)`;
+  }
+
+  const info = DESCALE_STEPS_DATA[state.descaleStep] || DESCALE_STEPS_DATA[1];
+  if (el.visSlider) {
+    el.visSlider.textContent = state.sliderOpen ? 'Slider: OPEN ⚠️' : 'Slider: CLOSED 🔒';
+    el.visSlider.className = `vis-deck-pill ${state.sliderOpen ? 'vis-led-warn' : 'vis-led-on'}`;
+  }
+  if (el.visBrewBtn) {
+    el.visBrewBtn.textContent = state.descaleDone ? 'Brew LED: OFF' : info.brewLed;
+    el.visBrewBtn.className = `vis-deck-pill ${state.descaleDone ? '' : info.brewClass}`.trim();
+  }
+  if (el.visMaintLed) {
+    el.visMaintLed.textContent = state.descaleDone ? 'Maint LED: OFF ✓' : info.maintLed;
+    el.visMaintLed.className = `vis-deck-pill ${state.descaleDone ? 'vis-led-on' : info.maintClass}`.trim();
+  }
+  if (el.visBevDial) {
+    el.visBevDial.textContent = state.descaleDone ? '✓ Complete' : info.bevDial;
+    el.visBevDial.className = `vis-dial-val${!state.descaleDone && info.bevBlink ? ' vis-dial-blink' : ''}`;
+  }
+  if (el.visTempDial) el.visTempDial.textContent = state.descaleDone ? '0 (OFF)' : info.tempDial;
+  if (el.visOutlet) el.visOutlet.textContent = state.descaleDone ? 'Tray Clean ✓' : info.outlet;
+  if (el.visTank) {
+    el.visTank.style.height = `${state.descaleDone ? 0 : info.tankPct}%`;
+    el.visTank.className = `vis-tank-fill ${state.descaleDone ? '' : info.tankClass}`.trim();
+  }
+  if (el.visTankLabel) el.visTankLabel.textContent = state.descaleDone ? 'Done 0%' : info.tankLabel;
+  if (el.visStepTitle) el.visStepTitle.textContent = state.descaleDone ? 'Descaling Complete ✓' : info.title;
+  if (el.visBleStateTag) el.visBleStateTag.textContent = state.descaleDone ? 'descalingNeeded = 0' : info.bleTag;
+  if (el.visWhatToDo) el.visWhatToDo.textContent = state.descaleDone ? 'Empty the drip tray and discard rinse water. Machine is ready for normal coffee use.' : info.todo;
+  if (el.visWhatToExpect) el.visWhatToExpect.textContent = state.descaleDone ? 'All LEDs OFF in standby; Maintenance LED descaling alert is cleared.' : info.expect;
+}
+
+function syncDescaleStepFromTelemetry(prevState, newState, waterTankEmpty, descalingNeeded) {
+  if (newState === 5 && state.descaleStep < 4) {
+    state.descaleStep = 4;
+    state.descaleDone = false;
+  } else if (newState === 3 && state.descaleStep < 4) {
+    state.descaleStep = 4;
+    state.descaleDone = false;
+  } else if (newState === 6) {
+    state.descaleStep = state.descaleStep >= 6 ? 8 : 5;
+    state.descaleDone = false;
+  } else if ((newState === 3 || prevState === 6) && waterTankEmpty && state.descaleStep === 5) {
+    state.descaleStep = 6;
+    showToast('Tank emptied! Rinse parts & refill 1.2 L fresh water (Steps 6–7).');
+  } else if (prevState === 6 && newState === 9 && state.descaleStep >= 7 && !descalingNeeded) {
+    state.descaleStep = 8;
+    state.descaleDone = true;
+    showToast('Descaling & Rinsing complete! Machine switched OFF.');
+  }
+  updateDescaleGuideUI();
+}
+
+function jumpToDescaleGuide() {
+  switchTab('tab-machine');
+  setTimeout(() => {
+    if (el.cardDescalingGuide) el.cardDescalingGuide.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 50);
+}
+
+async function prepareDescaleViaBle() {
+  state.descaleStep = 1;
+  state.descaleDone = false;
+  updateDescaleGuideUI();
+
+  if (!state.isConnected) {
+    const hLevel = parseInt(el.selectWaterHardness ? el.selectWaterHardness.value : '2', 10);
+    const hInfo = WATER_HARDNESS_INFO[hLevel] || WATER_HARDNESS_INFO[2];
+    if (el.descalePrepStatus) {
+      el.descalePrepStatus.textContent = `Offline checklist ready • Configured hardness: ${hInfo.label} (${hInfo.cups} cups interval). Connect via BLE for live sensor checks & step tracking.`;
+    }
+    showToast('Checklist reset to Step 1 (Connect BLE for live tracking)');
+    return;
+  }
+
+  try {
+    // Clear any scheduled timer safely before starting maintenance (03 06 01 02)
+    const stopPayload = new Uint8Array([0x03, 0x06, 0x01, 0x02]);
+    log(`Pre-descale BLE prep: clearing timers (03 06 01 02)`, 'tx');
+    await writeBleCharacteristic(BLE_UUIDS.CHAR_COMMAND, stopPayload).catch(() => {});
+    await sleep(150);
+
+    for (const uuid of [BLE_UUIDS.CHAR_MACHINE_STATUS, BLE_UUIDS.CHAR_USER_SETTINGS]) {
+      const bytes = await readBleCharacteristic(uuid).catch(() => null);
+      if (bytes) handleRawCharacteristicBytes(uuid, bytes);
+      await sleep(100);
+    }
+
+    const hInfo = WATER_HARDNESS_INFO[state.waterHardnessLevel] || WATER_HARDNESS_INFO[2];
+    const sliderTxt = state.sliderOpen ? 'OPEN ✗ (Close slider!)' : 'Closed ✓';
+    const binTxt = state.capsuleContainerFull ? 'FULL ✗ (Empty bin!)' : 'OK ✓';
+    const descaleTxt = state.descalingNeeded ? 'Needed ⚠️' : 'OK ✓';
+    if (el.descalePrepStatus) {
+      el.descalePrepStatus.textContent = `BLE Ready • Timers cleared • Slider: ${sliderTxt} • Bin: ${binTxt} • ${hInfo.label} (${hInfo.cups} cups) • Flag: ${descaleTxt}`;
+    }
+    showToast('Machine checked & timers cleared via BLE!');
+  } catch (err) {
+    log(`Pre-descale prep note: ${err.message}`, 'warn');
+    showToast(`Prep check note: ${err.message}`);
+  }
+}
+
+// 14c. In-App Official Manual Modal (Reader + Embedded PDF View)
+let manualActiveSection = 'all';
+let manualCurrentPage = 1;
+let manualViewMode = 'reader';
+
+function setManualMode(mode, page = manualCurrentPage) {
+  manualViewMode = mode;
+  manualCurrentPage = page || 1;
+  const isPdf = mode === 'pdf';
+  if (el.btnManualModeReader) el.btnManualModeReader.classList.toggle('active', !isPdf);
+  if (el.btnManualModePdf) el.btnManualModePdf.classList.toggle('active', isPdf);
+  if (el.manualReaderPane) el.manualReaderPane.classList.toggle('hidden', isPdf);
+  if (el.manualPdfPane) el.manualPdfPane.classList.toggle('hidden', !isPdf);
+  if (el.manualPdfPageTag) el.manualPdfPageTag.textContent = `Page ${manualCurrentPage}`;
+  if (isPdf && el.manualPdfFrame) {
+    el.manualPdfFrame.src = `documentation/NespressoExpertEN350G.pdf#page=${manualCurrentPage}`;
+  }
+}
+
+function filterManualSections() {
+  if (!el.manualSecCards) return;
+  const query = (el.inputManualSearch ? el.inputManualSearch.value : '').trim().toLowerCase();
+  el.manualSecCards.forEach(card => {
+    const sec = card.dataset.manualSec || '';
+    const secMatch = query ? true : (manualActiveSection === 'all' || sec === manualActiveSection);
+    const textMatch = !query || card.textContent.toLowerCase().includes(query);
+    card.classList.toggle('hidden', !(secMatch && textMatch));
+  });
+}
+
+function openManualModal(targetSection = 'all', targetPage = 1) {
+  if (!el.manualModal) return;
+  manualActiveSection = targetSection;
+  if (el.inputManualSearch) el.inputManualSearch.value = '';
+  if (el.manualJumpChips) {
+    el.manualJumpChips.forEach(chip => {
+      chip.classList.toggle('active-chip', chip.dataset.sec === targetSection);
+    });
+  }
+  setManualMode(manualViewMode, targetPage);
+  filterManualSections();
+  el.manualModal.classList.remove('hidden');
+}
+
+function closeManualModal() {
+  if (el.manualModal) el.manualModal.classList.add('hidden');
+}
+
 // 15. Formatting & Byte Helpers
 function formatMmSs(totalSec) {
   const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
@@ -2145,6 +2590,40 @@ function initListeners() {
   });
   el.btnBleFactoryReset.addEventListener('click', sendBleFactoryReset);
 
+  // LED Telematics Banner & Descaling Guide
+  if (el.btnJumpToDescale) el.btnJumpToDescale.addEventListener('click', jumpToDescaleGuide);
+  if (el.btnBlePrepDescale) el.btnBlePrepDescale.addEventListener('click', prepareDescaleViaBle);
+  if (el.btnDescalePrevStep) {
+    el.btnDescalePrevStep.addEventListener('click', () => {
+      state.descaleDone = false;
+      state.descaleStep = Math.max(1, state.descaleStep - 1);
+      updateDescaleGuideUI();
+    });
+  }
+  if (el.btnDescaleNextStep) {
+    el.btnDescaleNextStep.addEventListener('click', () => {
+      if (state.descaleStep >= 8) state.descaleDone = true;
+      else state.descaleStep = Math.min(8, state.descaleStep + 1);
+      updateDescaleGuideUI();
+    });
+  }
+  if (el.btnDescaleResetSteps) {
+    el.btnDescaleResetSteps.addEventListener('click', () => {
+      state.descaleStep = 1;
+      state.descaleDone = false;
+      updateDescaleGuideUI();
+    });
+  }
+  if (el.descaleSteps) {
+    el.descaleSteps.forEach(stepEl => {
+      stepEl.addEventListener('click', () => {
+        state.descaleStep = parseInt(stepEl.dataset.step, 10);
+        state.descaleDone = false;
+        updateDescaleGuideUI();
+      });
+    });
+  }
+
   // Rename Modal
   if (el.btnSaveRename) el.btnSaveRename.addEventListener('click', saveRename);
   if (el.btnCancelRename) el.btnCancelRename.addEventListener('click', closeRenameModal);
@@ -2200,6 +2679,26 @@ function initListeners() {
     }
   });
 
+  // Manual Modal
+  if (el.btnManual) el.btnManual.addEventListener('click', () => openManualModal('all', 1));
+  if (el.btnOpenManualDescale) el.btnOpenManualDescale.addEventListener('click', () => openManualModal('descaling', 19));
+  if (el.btnCloseManual) el.btnCloseManual.addEventListener('click', closeManualModal);
+  if (el.btnManualModeReader) el.btnManualModeReader.addEventListener('click', () => setManualMode('reader'));
+  if (el.btnManualModePdf) el.btnManualModePdf.addEventListener('click', () => setManualMode('pdf'));
+  if (el.inputManualSearch) el.inputManualSearch.addEventListener('input', filterManualSections);
+  if (el.manualJumpChips) {
+    el.manualJumpChips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        manualActiveSection = chip.dataset.sec || 'all';
+        manualCurrentPage = parseInt(chip.dataset.page || '1', 10);
+        if (el.inputManualSearch) el.inputManualSearch.value = '';
+        el.manualJumpChips.forEach(c => c.classList.toggle('active-chip', c === chip));
+        if (manualViewMode === 'pdf') setManualMode('pdf', manualCurrentPage);
+        filterManualSections();
+      });
+    });
+  }
+
   // Logs Drawer
   el.btnLogs.addEventListener('click', () => el.logsDrawer.classList.remove('hidden'));
   el.btnCloseLogs.addEventListener('click', () => el.logsDrawer.classList.add('hidden'));
@@ -2209,7 +2708,7 @@ function initListeners() {
     el.logCounter.textContent = '0 events';
   });
 
-  [el.settingsModal, el.logsDrawer].forEach(m => {
+  [el.settingsModal, el.logsDrawer, el.manualModal].filter(Boolean).forEach(m => {
     m.addEventListener('click', (e) => {
       if (e.target === m) m.classList.add('hidden');
     });
@@ -2231,6 +2730,7 @@ window.addEventListener('DOMContentLoaded', () => {
   renderFavoritesOnHome();
   updateCustomRecipeSummary();
   updateCupRangeHint();
+  updateDescaleGuideUI();
   registerServiceWorker();
   log(`Notpresso Expert v${APP_VERSION} initialized (AuthKey: ${getStoredAuthKey()}).`, 'info');
 });

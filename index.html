@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23C88D4B'><path d='M2 21h18v-2H2v2M20 8h-2V5h2m0-2H4v10a4 4 0 004 4h6a4 4 0 004-4v-3h2a2 2 0 002-2V5a2 2 0 00-2-2z'/></svg>">
 
-  <link rel="stylesheet" href="styles.css?v=0.3.0">
+  <link rel="stylesheet" href="styles.css?v=0.4.0">
 </head>
 <body>
   <div class="app-container">
@@ -22,11 +22,12 @@
       <div class="brand">
         <div class="logo-icon">☕</div>
         <div>
-          <h1>Notpresso <span class="badge-expert">Expert</span> <span class="badge-version">v0.3.0</span></h1>
+          <h1>Notpresso <span class="badge-expert">Expert</span> <span class="badge-version">v0.4.0</span></h1>
           <p id="envSubtitle" class="subtitle">EN 350.G Offline BLE Controller</p>
         </div>
       </div>
       <div class="header-actions">
+        <button id="btnManual" class="icon-btn" title="Official User Manual (EN 350.G)">📖</button>
         <button id="btnSettings" class="icon-btn" title="Settings & Auth Key">⚙️</button>
         <button id="btnLogs" class="icon-btn" title="BLE Packet Inspector">📡</button>
       </div>
@@ -62,6 +63,18 @@
           <span class="chip-label">Auth / Stock</span>
           <span id="chipPairingState" class="chip-val">--</span>
         </div>
+      </div>
+
+      <!-- Live Plain-Text LED Telematics Interpreter -->
+      <div id="ledTelematicsBanner" class="led-banner hidden">
+        <div class="led-banner-main">
+          <span id="ledBannerDot" class="led-dot led-ok"></span>
+          <div>
+            <div id="ledBannerTitle" class="led-banner-title">Steady Lights — Machine is Ready</div>
+            <div id="ledBannerDesc" class="led-banner-desc">All sensors normal. Ready to brew.</div>
+          </div>
+        </div>
+        <button type="button" id="btnJumpToDescale" class="btn-xs hidden">Descale Guide ↗</button>
       </div>
     </section>
 
@@ -558,6 +571,179 @@
           <button id="btnBleFactoryReset" class="btn btn-danger" style="padding:11px;">⚠️ Send BLE Factory Reset (`03 07 00`)</button>
         </div>
       </div>
+
+      <!-- Interactive Descaling Guide & Manual LED Decoder (EN 350.G Manual pp. 13, 18-21) -->
+      <div id="cardDescalingGuide" class="card">
+        <div class="slider-header">
+          <h2 class="card-title" style="margin-bottom:0;">🧼 Interactive Descaling Guide</h2>
+          <span id="badgeDescalePhase" class="mini-pill">Step 1 / 8 (~20 min)</span>
+        </div>
+        <p class="card-desc" style="margin-top:4px; margin-bottom:10px;">
+          Hardware firmware requires the physical 6s dial handshake to arm the acid pump (BLE cannot trigger Descaling remotely for safety). Notpresso prepares the machine via BLE and auto-tracks every phase live from <code>06aa3a12</code>.
+        </p>
+
+        <!-- BLE Pre-Descale Prep -->
+        <div class="split-temp-box" style="margin-top:0; margin-bottom:12px;">
+          <button type="button" id="btnBlePrepDescale" class="btn btn-primary" style="width:100%; padding:10px; font-size:13px;">
+            ⚡ Prepare Machine via BLE (Clear Timers & Check Sensors)
+          </button>
+          <small id="descalePrepStatus" class="field-hint" style="margin-top:6px;">
+            Checks slider state, capsule bin, water hardness interval, and clears pending scheduled brews.
+          </small>
+        </div>
+
+        <!-- Visual Hardware Stage & Step Simulator ("What to Do" + "What to Expect") -->
+        <div id="descaleVisualStage" class="vis-stage">
+          <div class="vis-deck-bar">
+            <span id="visSlider" class="vis-deck-pill">Slider: CLOSED 🔒</span>
+            <span id="visBrewBtn" class="vis-deck-pill vis-led-off">Brew LED: OFF</span>
+            <span id="visMaintLed" class="vis-deck-pill vis-led-off">Maint LED: OFF</span>
+          </div>
+
+          <div class="vis-front-row">
+            <div class="vis-dial-box">
+              <div class="vis-box-label">Beverage Dial</div>
+              <div id="visBevDial" class="vis-dial-val">☕ Any</div>
+            </div>
+            <div class="vis-dial-box">
+              <div class="vis-box-label">Temp Dial</div>
+              <div id="visTempDial" class="vis-dial-val">🌡️ Normal</div>
+            </div>
+            <div class="vis-dial-box">
+              <div class="vis-box-label">Outlet / Tray</div>
+              <div id="visOutlet" class="vis-dial-val">Tray Empty</div>
+            </div>
+            <div class="vis-tank-box">
+              <div class="vis-tank-gauge">
+                <div id="visTank" class="vis-tank-fill" style="height: 0%;"></div>
+              </div>
+              <div id="visTankLabel" class="vis-tank-label">Empty 0%</div>
+            </div>
+          </div>
+
+          <div id="descaleExpectBox" class="vis-expect-box">
+            <div class="vis-expect-header">
+              <strong id="visStepTitle">Step 1 of 8 — Empty Tray & Capsule Bin</strong>
+              <span id="visBleStateTag" class="mini-pill">06aa3a12: READY / STANDBY</span>
+            </div>
+            <div class="vis-expect-row">
+              <span class="vis-row-tag vis-tag-do">👉 What to Do</span>
+              <p id="visWhatToDo">Remove and empty the drip tray and used capsule container, reinsert them, and push the capsule slider fully closed.</p>
+            </div>
+            <div class="vis-expect-row">
+              <span class="vis-row-tag vis-tag-expect">👀 What to Expect</span>
+              <p id="visWhatToExpect">Machine can be ON or OFF; if ON with descalingNeeded, Brew LED is ON and Maintenance LED blinks slowly (Bit 5 = 1, Bit 46 = 1).</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visual Dial Handshake Summary -->
+        <label class="form-label" style="font-size:12px;">Quick Dial Handshake (Step 4):</label>
+        <div class="dial-handshake-grid">
+          <div class="dial-pill"><span>1. OFF</span>Turn Temp → 0</div>
+          <div class="dial-pill"><span>2. Hold 6s</span>Brew Btn (Dials Flash)</div>
+          <div class="dial-pill"><span>3. Ristretto</span>Dial + Press Brew</div>
+          <div class="dial-pill"><span>4. Confirm</span>Temp High (I) + Brew</div>
+        </div>
+
+        <!-- 8-Step Interactive Checklist -->
+        <div id="descaleStepsList" class="descale-step-list">
+          <div class="descale-step active-step" data-step="1">
+            <div class="descale-step-num">1</div>
+            <div class="descale-step-body">
+              <strong>Empty Tray & Capsule Bin</strong>
+              <span>Remove and empty the drip tray and used capsule container. Ensure the capsule slider is closed.</span>
+            </div>
+          </div>
+          <div class="descale-step" data-step="2">
+            <div class="descale-step-num">2</div>
+            <div class="descale-step-body">
+              <strong>Mix Descaling Solution</strong>
+              <span>Fill water tank with <strong>2 units of Nespresso descaling liquid</strong> and potable water up to the <strong>MAX</strong> level.</span>
+            </div>
+          </div>
+          <div class="descale-step" data-step="3">
+            <div class="descale-step-num">3</div>
+            <div class="descale-step-body">
+              <strong>Place 1.2 L Container & Turn Machine OFF</strong>
+              <span>Place a <strong>&ge; 1.2 L (41 oz)</strong> container under the outlet. Turn Temp dial anti-clockwise to <strong>0</strong> (light blinks 5s before OFF).</span>
+            </div>
+          </div>
+          <div class="descale-step" data-step="4">
+            <div class="descale-step-num">4</div>
+            <div class="descale-step-body">
+              <strong>Enter Descaling Mode (<code>DESCALING_READY</code>)</strong>
+              <span>Hold <strong>Brew 6s</strong> (both dials flash) &rarr; select <strong>Ristretto</strong> + press <strong>Brew</strong> &rarr; set Temp dial to <strong>High (I)</strong> + press <strong>Brew</strong> (Low <code>O</code> cancels). Ristretto blinks to confirm. <em>Once validated, cycle cannot be exited until complete.</em></span>
+            </div>
+          </div>
+          <div class="descale-step" data-step="5">
+            <div class="descale-step-num">5</div>
+            <div class="descale-step-body">
+              <strong>Run Descaling Pass (<code>DESCALING</code>)</strong>
+              <span>Press <strong>Brew</strong> to start (Maintenance LED steady ON). Solution flows through coffee &amp; hot water outlets. If paused &amp; Maintenance LED blinks, empty drip tray, replace, and press <strong>Brew</strong> until tank empties. <em>(Press Brew anytime to pause).</em></span>
+            </div>
+          </div>
+          <div class="descale-step" data-step="6">
+            <div class="descale-step-num">6</div>
+            <div class="descale-step-body">
+              <strong>Thoroughly Rinse Parts</strong>
+              <span>Remove and rinse the water tank, drip tray, and cup support with fresh water to remove all acid residue.</span>
+            </div>
+          </div>
+          <div class="descale-step" data-step="7">
+            <div class="descale-step-num">7</div>
+            <div class="descale-step-body">
+              <strong>Refill Tank with 1.2 L Fresh Water</strong>
+              <span>Fill water tank with <strong>1.2 L (41 oz)</strong> fresh potable water and place the empty container back under the outlet.</span>
+            </div>
+          </div>
+          <div class="descale-step" data-step="8">
+            <div class="descale-step-num">8</div>
+            <div class="descale-step-body">
+              <strong>Run Rinse Pass &amp; Auto-Off</strong>
+              <span>Press <strong>Brew</strong> to rinse until tank empties. Machine switches <strong>OFF automatically</strong> when done. <em>(If Maintenance LED still blinks afterward, &lt; 1.2 L was added — repeat Steps 7–8.)</em></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row" style="margin-top:10px;">
+          <button type="button" id="btnDescalePrevStep" class="btn btn-outline" style="flex:1; padding:9px;">◀ Prev</button>
+          <button type="button" id="btnDescaleNextStep" class="btn btn-primary" style="flex:1; padding:9px;">Next Step ▶</button>
+          <button type="button" id="btnDescaleResetSteps" class="btn btn-outline" style="flex:0.6; padding:9px;">↺ Reset</button>
+        </div>
+
+        <button type="button" id="btnOpenManualDescale" class="btn btn-outline" style="margin-top:8px;">📖 View Official Manual (Pages 19–20: Descaling)</button>
+
+        <!-- Collapsible Official LED & Water Hardness Reference -->
+        <details class="manual-details" style="margin-top:12px;">
+          <summary>📖 Official LED Blinking &amp; Settings Reference (Manual pp. 13, 18, 21)</summary>
+          <table class="manual-table">
+            <thead>
+              <tr><th>Machine LEDs</th><th>Plain-Text Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Steady Lights</td><td>Ready to brew (<code>READY</code>)</td></tr>
+              <tr><td>All Lights Blink (~25–30s)</td><td>Heating up (<code>HEAT_UP</code>)</td></tr>
+              <tr><td>Brew ON + Maint LED Slow Blink</td><td><strong>Descaling required</strong> (<code>descalingNeeded</code>)</td></tr>
+              <tr><td>Brew OFF + Maint LED Steady ON</td><td>Water tank empty and/or capsule bin full</td></tr>
+              <tr><td>Ristretto Blink + Maint LED Blink</td><td>Descaling Ready / Paused — user action needed</td></tr>
+              <tr><td>Ristretto Blink + Maint LED Steady</td><td>Descaling / Rinsing active (Brew to pause)</td></tr>
+              <tr><td>Maint ON + Brew OFF + Temp Fast Blink</td><td>Overheating or &lt; 0&deg;C — wait a few minutes</td></tr>
+              <tr><td>Nespresso Front Light ON</td><td>Capsule stock empty (<code>capsuleStockLow</code>)</td></tr>
+            </tbody>
+          </table>
+          <table class="manual-table" style="margin-top:8px;">
+            <thead>
+              <tr><th>Settings Dial (Hold Brew 6s)</th><th>Function / Interval</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Ristretto / Espresso / Lungo</td><td>Descaling / Empty System / Factory Reset</td></tr>
+              <tr><td>Americano / Hot Water / All Lights</td><td>Water Hardness / Auto-Off / Bluetooth</td></tr>
+              <tr><td>Hardness Levels 0–4 (40 ml cups)</td><td>4000 / 3000 / 2000 / 1500 / 1000 cups</td></tr>
+            </tbody>
+          </table>
+        </details>
+      </div>
     </main>
 
     <!-- Active Brewing / Multi-Stage / Soak Modal Overlay -->
@@ -625,7 +811,7 @@
               <li>Paste the resulting 16-char key above and tap <strong>Connect</strong>!</li>
             </ol>
           </div>
-          <div class="settings-version-tag">Notpresso Expert v0.3.0 • Offline BLE Controller</div>
+          <div class="settings-version-tag">Notpresso Expert v0.4.0 • Offline BLE Controller</div>
         </div>
       </div>
     </div>
@@ -650,6 +836,139 @@
       </div>
     </div>
 
+    <!-- Official Manual In-App Modal (NespressoExpertEN350G.pdf) -->
+    <div id="manualModal" class="modal-backdrop hidden">
+      <div class="modal-card manual-modal-card">
+        <div class="modal-header">
+          <h3>📖 Nespresso Expert C80 / EN 350.G Manual</h3>
+          <button id="btnCloseManual" class="close-btn">&times;</button>
+        </div>
+
+        <div class="manual-toolbar">
+          <div class="temp-toggle-group compact">
+            <button type="button" id="btnManualModeReader" class="temp-btn-custom active">📱 In-App Reader (No Download)</button>
+            <button type="button" id="btnManualModePdf" class="temp-btn-custom">📄 Embedded PDF View</button>
+            <a href="documentation/NespressoExpertEN350G.pdf" target="_blank" rel="noopener" class="chip-btn" style="text-decoration:none; display:inline-flex; align-items:center;">↗ Raw PDF</a>
+          </div>
+          <input type="search" id="inputManualSearch" class="styled-input" placeholder="Search manual (e.g. descale, blink, 6 sec, empty, hardness)..." style="font-family:inherit; letter-spacing:0; font-size:12.5px; margin-top:8px;">
+          <div class="manual-jump-row">
+            <button type="button" class="chip-btn manual-jump-chip active-chip" data-sec="all" data-page="1">All Pages</button>
+            <button type="button" class="chip-btn manual-jump-chip" data-sec="specs" data-page="4">p.4 Specs</button>
+            <button type="button" class="chip-btn manual-jump-chip" data-sec="overview" data-page="8">p.8 Overview</button>
+            <button type="button" class="chip-btn manual-jump-chip" data-sec="brew" data-page="11">p.10–12 Brew &amp; Rinse</button>
+            <button type="button" class="chip-btn manual-jump-chip" data-sec="settings" data-page="13">p.13–16 Settings</button>
+            <button type="button" class="chip-btn manual-jump-chip" data-sec="hardness" data-page="18">p.17–18 Clean &amp; Hardness</button>
+            <button type="button" class="chip-btn manual-jump-chip" data-sec="descaling" data-page="19">p.19–20 Descaling</button>
+            <button type="button" class="chip-btn manual-jump-chip" data-sec="troubleshooting" data-page="21">p.21 Troubleshooting</button>
+          </div>
+        </div>
+
+        <div id="manualReaderPane" class="manual-reader-pane">
+          <div class="manual-sec-card" data-manual-sec="specs">
+            <h4>📄 pp. 2 &amp; 4 — Specifications &amp; Pairing</h4>
+            <ul>
+              <li><strong>Electrical / Pressure:</strong> 220–240 V~, 50–60 Hz, 1150–1260 W • Pump max <strong>19 bar (1.9 MPa)</strong>.</li>
+              <li><strong>Radio BLE:</strong> 2.402–2.480 GHz, max transmit power 4 dBm • Weight ~4.4 kg (9.7 lbs).</li>
+              <li><strong>Dimensions &amp; Tank:</strong> Tank ~<strong>1.1 L (37.5 oz)</strong> • 38.05 × 28.7 × 22.3 cm (15 × 11.3 × 8.8 in).</li>
+              <li><strong>Pairing Complete:</strong> The <em>Nespresso Light</em> blinks <strong>3 times</strong> to confirm pairing.</li>
+            </ul>
+          </div>
+
+          <div class="manual-sec-card" data-manual-sec="overview">
+            <h4>🎛️ p. 8 — Machine Overview &amp; Controls</h4>
+            <ul>
+              <li><strong>Top / Front LEDs:</strong> <em>Maintenance Light</em> (top right), <em>Brewing Button</em>, <em>Nespresso Light</em> (capsule stock management, top left).</li>
+              <li><strong>Physical Dials:</strong> <em>Temperature dial</em> (0 / Warm, Hot, Extra Hot) and <em>Beverage dial</em> (Ristretto, Espresso, Lungo, Americano, Hot water).</li>
+              <li><strong>Hardware Parts:</strong> Capsule insertion slider, coffee &amp; hot water outlet, adjustable cup support &amp; drip grid, drip tray, capsule container, 1.1 L tank &amp; base.</li>
+            </ul>
+          </div>
+
+          <div class="manual-sec-card" data-manual-sec="brew">
+            <h4>☕ pp. 9–12 — ON/OFF, First Rinse &amp; Coffee Preparation</h4>
+            <ul>
+              <li><strong>Turn ON / Heat Up:</strong> Press Brew button, turn either dial, or open slider. Lights blink while heating (~<strong>25–30s</strong>); steady lights = ready.</li>
+              <li><strong>Turn OFF:</strong> Turn Temperature dial anti-clockwise all the way to <strong>0</strong> (light blinks <strong>5 seconds</strong> before shutoff).</li>
+              <li><strong>First-Use Rinse:</strong> Place container, close slider, brew <strong>3× Lungo</strong> then <strong>2× Hot Water</strong>; empty drip tray.</li>
+              <li><strong>Factory Cup Defaults:</strong> Ristretto <strong>25 ml</strong> • Espresso <strong>40 ml</strong> • Lungo <strong>110 ml</strong> • Americano <strong>25 ml coffee + 125 ml water</strong> • Hot Water <strong>200 ml</strong>.</li>
+              <li><strong>10s Eject &amp; Top-Up:</strong> Capsule auto-ejects after <strong>10 seconds</strong>. Press Brew within 10s after brew ends to manually top up (or select Water icon for water top-up).</li>
+              <li><strong>Stop Flow Mid-Brew:</strong> Press Brew button or slide capsule slider slightly right (no top-up after manual stop).</li>
+            </ul>
+          </div>
+
+          <div class="manual-sec-card" data-manual-sec="settings">
+            <h4>⚙️ pp. 13–16 — Settings Mode, Programming &amp; Emptying</h4>
+            <ul>
+              <li><strong>Enter Settings Mode:</strong> Machine OFF + slider closed → press &amp; hold <strong>Brew button for 6 seconds</strong> (both dials flash) → select beverage icon → press Brew:</li>
+              <li><strong>Dial Menu Map:</strong> Ristretto = <em>Descaling</em> • Espresso = <em>Empty System</em> • Lungo = <em>Factory Reset</em> • Americano = <em>Water Hardness</em> • Hot Water = <em>Auto-Off Energy Saving</em> • All Lights = <em>Bluetooth</em>.</li>
+              <li><strong>Exit Settings Mode:</strong> Open slider or wait <strong>30s</strong> (note: Descaling cannot be exited once confirmed).</li>
+              <li><strong>Auto-Off Energy Saving (p. 13):</strong> Temp dial sets <strong>9 min</strong> (default), <strong>30 min</strong>, <strong>2 hours</strong>, or <strong>8 hours</strong>; selected icon blinks twice to confirm.</li>
+              <li><strong>Hold-to-Program Limits (p. 14):</strong> Ristretto 15–30 ml • Espresso 30–70 ml • Lungo 70–130 ml • Americano 15–110 ml coffee + 25–300 ml water • Hot Water 50–300 ml.</li>
+              <li><strong>Factory Reset (p. 15):</strong> Select Lungo + Brew → Temp dial to Max + Brew. Clears pairing, stock counter, and resets hardness to Hard.</li>
+              <li><strong>Emptying System (p. 16):</strong> Remove tank first, enter Settings → Espresso + Brew → Temp dial to Max + Brew (steam exits spout; machine stays <strong>blocked 10 minutes</strong> after emptying).</li>
+            </ul>
+          </div>
+
+          <div class="manual-sec-card" data-manual-sec="hardness">
+            <h4>💧 pp. 17–18 — Daily Cleaning &amp; Water Hardness</h4>
+            <ul>
+              <li><strong>Cleaning (p. 17):</strong> Empty capsule bin daily. Wash tank/lid with odorless detergent and dry. <strong>Not dishwasher safe; never immerse machine.</strong></li>
+            </ul>
+            <table class="manual-table" style="margin-top:6px;">
+              <thead>
+                <tr><th>App Level</th><th>fH</th><th>dH</th><th>CaCO3</th><th>Descale Every</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Level 0</td><td>&lt; 5</td><td>&lt; 3</td><td>&lt; 50 mg/l</td><td>4000 cups (40 ml)</td></tr>
+                <tr><td>Level 1</td><td>&gt; 7</td><td>&gt; 4</td><td>&gt; 70 mg/l</td><td>3000 cups</td></tr>
+                <tr><td>Level 2</td><td>&gt; 13</td><td>&gt; 7</td><td>&gt; 130 mg/l</td><td>2000 cups</td></tr>
+                <tr><td>Level 3</td><td>&gt; 25</td><td>&gt; 14</td><td>&gt; 250 mg/l</td><td>1500 cups</td></tr>
+                <tr><td>Level 4 (Default)</td><td>&gt; 38</td><td>&gt; 21</td><td>&gt; 380 mg/l</td><td>1000 cups</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="manual-sec-card" data-manual-sec="descaling">
+            <h4>🧼 pp. 19–20 — Official Descaling Procedure (~20 min)</h4>
+            <ol>
+              <li><strong>Empty</strong> drip tray and used capsule container.</li>
+              <li>Fill water tank with <strong>2 units Nespresso descaling liquid</strong> + potable water up to <strong>MAX</strong>.</li>
+              <li>Place a <strong>&ge; 1.2 L (41 oz)</strong> container under coffee outlet; turn Temp dial to <strong>0 (OFF)</strong>.</li>
+              <li>Hold <strong>Brew 6s</strong> (both dials flash) → select <strong>Ristretto</strong> + press Brew → Temp dial <strong>High "I"</strong> + press Brew (Low "O" cancels). Ristretto blinks.</li>
+              <li>Press Brew to start descaling (coffee &amp; hot water outlets). If paused &amp; Maintenance LED blinks, empty tray/container, replace, and press Brew until tank empties.</li>
+              <li><strong>Rinse</strong> water tank, drip tray, and cup support thoroughly.</li>
+              <li>Refill tank with <strong>1.2 L (41 oz) fresh potable water</strong>; place empty container under outlet.</li>
+              <li>Press Brew to rinse until tank empties and machine switches <strong>OFF</strong> automatically. Empty tray. <em>(If Maintenance LED still blinks, &lt; 1.2 L was added — repeat Steps 7–8.)</em></li>
+            </ol>
+          </div>
+
+          <div class="manual-sec-card" data-manual-sec="troubleshooting">
+            <h4>🔧 p. 21 — Troubleshooting &amp; LED Signals</h4>
+            <table class="manual-table">
+              <thead>
+                <tr><th>Signal / Symptom</th><th>Meaning &amp; Action</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Brew ON + Maint LED Slow Blink</td><td><strong>Descaling required.</strong></td></tr>
+                <tr><td>Brew OFF + Maint LED Steady ON</td><td>Water tank empty and/or capsule tray full.</td></tr>
+                <tr><td>Maint ON + Brew OFF + Temp Fast Blink</td><td>Overheating or below 0&deg;C — wait a few minutes.</td></tr>
+                <tr><td>Nespresso Front LED ON</td><td>Capsule stock counter is empty.</td></tr>
+                <tr><td>Hot water stops late after Brew press</td><td>Normal behavior — short drain delay after stopping.</td></tr>
+                <tr><td>Capsule tray / drip tray stuck</td><td>Unplug, lift machine, push out via hole underneath &amp; clean.</td></tr>
+                <tr><td>Pairing fails</td><td>Keep phone within <strong>20 cm</strong>, no microwave active nearby.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="manualPdfPane" class="manual-pdf-pane hidden">
+          <p class="field-hint" style="margin-bottom:6px;">
+            Embedded vector PDF (<span id="manualPdfPageTag">Page 1</span>). Note: Android Chrome may prompt to open/download raw PDFs — switch to <strong>📱 In-App Reader</strong> for instant offline reading without downloading.
+          </p>
+          <iframe id="manualPdfFrame" class="manual-pdf-frame" title="Nespresso Expert Official Manual PDF"></iframe>
+        </div>
+      </div>
+    </div>
+
     <!-- Packet Inspector Log Drawer -->
     <div id="logsDrawer" class="modal-backdrop hidden">
       <div class="modal-card logs-card">
@@ -663,7 +982,7 @@
             <span id="logCounter" class="log-counter">0 events</span>
           </div>
           <div id="logConsole" class="log-console">
-            <div class="log-entry info">[System] Notpresso Expert v0.3.0 ready to connect to EN 350.G</div>
+            <div class="log-entry info">[System] Notpresso Expert v0.4.0 ready to connect to EN 350.G</div>
           </div>
         </div>
       </div>
@@ -673,6 +992,6 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="app.js?v=0.3.0"></script>
+  <script src="app.js?v=0.4.0"></script>
 </body>
 </html>
