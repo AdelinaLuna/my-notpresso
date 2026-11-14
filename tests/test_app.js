@@ -1025,7 +1025,7 @@ test('Structural Contract: UI layout & required IDs intact for overhaul readines
   assert.equal(SW_JS.includes(ver), false, 'sw.js must not hardcode APP_VERSION');
 });
 
-test('Feature [v0.12.0]: 5s logo long-press countdown & forceAppCacheUpdate purges SW and caches', async () => {
+test('Feature [v0.12.0 / v0.13.7]: Configurable logo long-press countdown & forceAppCacheUpdate purges SW and caches', async () => {
   let unregistered = 0;
   const deletedCaches = [];
   let replacedUrl = null;
@@ -1049,29 +1049,32 @@ test('Feature [v0.12.0]: 5s logo long-press countdown & forceAppCacheUpdate purg
 
   const el = h.getEl();
   const ver = h.eval('APP_VERSION');
+  const holdSec = h.eval('LOGO_HOLD_REFRESH_SEC');
+  assert.ok(Number.isInteger(holdSec) && holdSec > 0, 'LOGO_HOLD_REFRESH_SEC must be a positive integer');
+  assert.equal(el.btnLogoRefresh.title, `Hold ${holdSec}s to force app & cache update`);
 
-  // Start hold -> shows 5s countdown, early release restores badge
+  // Start hold -> shows configured countdown, early release restores badge
   h.ctx.startLogoHoldRefresh({ button: 0 });
   assert.equal(el.btnLogoRefresh.classList.contains('is-holding'), true);
   assert.equal(el.logoHoldCountdown.classList.contains('hidden'), false);
-  assert.equal(el.logoHoldCountdown.textContent, '5s');
-  assert.equal(el.badgeAppVersion.textContent, '↻ 5s');
+  assert.equal(el.logoHoldCountdown.textContent, `${holdSec}s`);
+  assert.equal(el.badgeAppVersion.textContent, `↻ ${holdSec}s`);
 
   h.ctx.cancelLogoHoldRefresh();
   assert.equal(el.btnLogoRefresh.classList.contains('is-holding'), false);
   assert.equal(el.logoHoldCountdown.classList.contains('hidden'), true);
   assert.equal(el.badgeAppVersion.textContent, `v${ver}`);
 
-  // Hold full 5s -> ticks 4s..1s then purges SW, caches, and reloads with ?refresh=
+  // Hold full LOGO_HOLD_REFRESH_SEC -> ticks (N-1)..1s without early reload, then purges SW & caches
   h.ctx.startLogoHoldRefresh({ button: 0 });
   const holdTimer = Array.from(h.activeIntervals.values()).pop();
-  holdTimer.fn();
-  assert.equal(el.logoHoldCountdown.textContent, '4s');
-  assert.equal(el.badgeAppVersion.textContent, '↻ 4s');
-  holdTimer.fn();
-  holdTimer.fn();
-  holdTimer.fn();
-  assert.equal(el.logoHoldCountdown.textContent, '1s');
+  assert.equal(holdTimer.ms, 1000);
+  for (let rem = holdSec - 1; rem >= 1; rem -= 1) {
+    holdTimer.fn();
+    assert.equal(el.logoHoldCountdown.textContent, `${rem}s`);
+    assert.equal(el.badgeAppVersion.textContent, `↻ ${rem}s`);
+    assert.equal(replacedUrl, null, 'Must not reload before LOGO_HOLD_REFRESH_SEC elapses');
+  }
   holdTimer.fn();
   await new Promise(r => setTimeout(r, 0));
 

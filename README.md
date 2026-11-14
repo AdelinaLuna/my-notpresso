@@ -15,9 +15,12 @@ Nespresso officially discontinued Bluetooth onboarding and support for the **Nes
 
 ---
 
-## 2. What's New in v0.5.0 – v0.13.6
+## 2. What's New in v0.5.0 – v0.13.7
+
+- **`v0.13.7` — Configurable 3s Cacheless Refresh Hold**: Replaced the hardcoded `5s` logo-hold refresh timeout with `LOGO_HOLD_REFRESH_SEC = 3` (driving tooltip, badge countdown, and timer).
 
 - **`v0.13.6` — Offline-First Unified Dial Calibration Sync**: Active calibration profiles (`My App Calibration` by default, or `Factory Defaults`), `#selectCupTarget` option text (`Default <ml>ml`), Custom quick-chips, and Presets subtitles/volume labels now stay 100% synced everywhere without requiring a BLE connection first; saved `localStorage` values are no longer overwritten on boot.
+
 - **`v0.13.5` — Personalized Dial & Preset Volume Labels**: Connect telemetry now reads all 6 rotary dial targets `[0..5]`, persists them in `localStorage` (`notpresso_machine_dial_v1`), updates Presets subtitles/defaults, and derives slider volume labels solely from your synced machine settings instead of hardcoded OEM values.
 
 - **`v0.13.4` — Desktop 2nd-Stage Slider Drag Fix**: Stage reordering now only touches the DOM when the order actually changes, so dragging the 2nd stage volume slider with a mouse no longer stops after one step.

@@ -6,7 +6,8 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.6';
+const APP_VERSION = '0.13.7';
+const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
 const BLE_UUIDS = {
@@ -3897,13 +3898,13 @@ async function forceAppCacheUpdate() {
 function startLogoHoldRefresh(e) {
   if (e && e.button !== undefined && e.button !== 0) return;
   if (logoHoldInterval) clearInterval(logoHoldInterval);
-  logoHoldRemaining = 5;
+  logoHoldRemaining = LOGO_HOLD_REFRESH_SEC;
   if (el.btnLogoRefresh) el.btnLogoRefresh.classList.add('is-holding');
   if (el.logoHoldCountdown) {
-    el.logoHoldCountdown.textContent = '5s';
+    el.logoHoldCountdown.textContent = `${LOGO_HOLD_REFRESH_SEC}s`;
     el.logoHoldCountdown.classList.remove('hidden');
   }
-  if (el.badgeAppVersion) el.badgeAppVersion.textContent = '↻ 5s';
+  if (el.badgeAppVersion) el.badgeAppVersion.textContent = `↻ ${LOGO_HOLD_REFRESH_SEC}s`;
 
   logoHoldInterval = setInterval(() => {
     logoHoldRemaining -= 1;
@@ -3930,6 +3931,8 @@ function cancelLogoHoldRefresh() {
 
 function initLogoHoldRefresh() {
   if (!el.btnLogoRefresh) return;
+  el.btnLogoRefresh.title = `Hold ${LOGO_HOLD_REFRESH_SEC}s to force app & cache update`;
+  if (el.logoHoldCountdown) el.logoHoldCountdown.textContent = `${LOGO_HOLD_REFRESH_SEC}s`;
   el.btnLogoRefresh.addEventListener('contextmenu', (e) => e.preventDefault());
   el.btnLogoRefresh.addEventListener('pointerdown', startLogoHoldRefresh);
   ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => {
