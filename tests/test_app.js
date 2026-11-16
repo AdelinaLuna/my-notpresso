@@ -967,36 +967,21 @@ test('Feature [#16]: 5-Shot System Rinse validates slider, executes 3x Lungo + 2
   assert.equal(el.badgeRinseStatus.textContent, 'Stopped');
 });
 
-test('Feature [#15]: 10s post-brew auto-eject countdown & 1-tap top-up (+15ml Coffee / +25ml Water)', async () => {
+test('Fix [v0.14.8]: finishBrewTracking retires non-working 10s BLE post-brew countdown and closes modal', async () => {
   const h = createAppHarness({ deferTimeouts: true });
   const state = h.getState();
   const el = h.getEl();
-  const txs = [];
   state.isConnected = true;
-  h.ctx.writeBleCharacteristic = async (u, b) => txs.push(h.ctx.bytesToHexNoSpaces(b));
+  h.ctx.writeBleCharacteristic = async () => {};
 
-  await h.ctx.brewPreset('Espresso', 1, 2); // Max temp 0x02
+  await h.ctx.brewPreset('Espresso', 1, 2);
   h.ctx.finishBrewTracking();
-  assert.equal(state.postBrewRemainingSec, 10);
-  assert.equal(el.postBrewBox.classList.contains('hidden'), false);
-  assert.equal(el.btnStopBrew.classList.contains('hidden'), true);
-
-  // Tick timer down to 0
-  const postTimer = Array.from(h.activeIntervals.values()).pop();
-  for (let s = 0; s < 10; s++) postTimer.fn();
   assert.equal(state.postBrewRemainingSec, 0);
+  assert.equal(el.postBrewBox.classList.contains('hidden'), true);
+
+  // Settle timeout closes brew modal cleanly
+  await new Promise(r => setTimeout(r, 650));
   assert.equal(el.brewModal.classList.contains('hidden'), true);
-
-  // +Coffee and +Water top-ups inherit locked temperature 0x02
-  txs.length = 0;
-  await h.ctx.triggerPostBrewTopUp('coffee');
-  assert.equal(txs[0], '011008000001000F000000');
-  assert.equal(txs[1], '03050704000000000207');
-
-  txs.length = 0;
-  await h.ctx.triggerPostBrewTopUp('water');
-  assert.equal(txs[0], '0110080000020019000000');
-  assert.equal(txs[1], '03050704000000000207');
 });
 
 test('Features [v0.5.0–v0.6.0]: Per-cup temp overrides, recipe reorder, and expandable preset tweaks', async () => {

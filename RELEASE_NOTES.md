@@ -33,6 +33,9 @@ High-level user benefits across meaningful releases (newest first):
 
 > **Maintenance rule:** Every patch, minor, or major increment of `APP_VERSION` in `app.js` receives an entry below detailing commits, protocol/UI changes, and verification coverage.
 
+### `v0.14.8` — `2026-11-17`
+- **`app.js`, `tests/test_app.js`**: Retired the 10-second BLE post-brew top-up countdown in `finishBrewTracking()` because live hardware (`FW 1.244`) ejects/locks the capsule faster than 10s and rejects post-brew `03 05 07` commands with `0x24 0x12` (`SLIDER_NOT_BEEN_OPENED`). Brew completion now closes the modal cleanly after 600ms.
+
 ### `v0.14.7` — `2026-11-17`
 - **`app.js`, `tests/test_app.js`**: Handles hardware `0x24 0x12` (`SLIDER_NOT_BEEN_OPENED`) during 2-stage split-temperature brews without aborting the workflow—keeps the Brew Modal open prompting to open & close the capsule slider and auto-launches Stage 2 as soon as `06aa3a22` reports `OPEN -> CLOSED`.
 

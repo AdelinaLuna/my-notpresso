@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.14.7';
+const APP_VERSION = '0.14.8';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -2373,40 +2373,27 @@ function finishBrewTracking({ immediate = false } = {}) {
   state.isBrewing = false;
   clearInterval(state.brewInterval);
   clearInterval(state.postBrewInterval);
+  state.postBrewRemainingSec = 0;
   el.brewProgressBar.style.width = '100%';
+  if (el.postBrewBox) el.postBrewBox.classList.add('hidden');
 
-  if (immediate || state.activeWorkflow || state.errorPresent || state.machineState === 6 || state.machineState === 8) {
-    state.postBrewRemainingSec = 0;
+  if (immediate || state.activeWorkflow || state.pendingStage2Split || state.errorPresent || state.machineState === 6 || state.machineState === 8) {
     setTimeout(() => {
-      if (!state.activeWorkflow && state.postBrewRemainingSec === 0) {
+      if (!state.activeWorkflow && !state.pendingStage2Split && state.postBrewRemainingSec === 0) {
         dismissPostBrewModal();
       }
     }, 600);
     return;
   }
 
-  // Show 10-second pre-eject countdown & top-up controls (Manual p. 11)
-  state.postBrewRemainingSec = 10;
+  // EN 350.G (FW 1.244) drops/locks the capsule faster than 10s and rejects post-brew 03 05 07 with 0x24 0x12
   if (el.brewCupGraphic) el.brewCupGraphic.textContent = '✨';
-  if (el.brewModalTitle) el.brewModalTitle.textContent = 'Brew Complete — Auto-Eject in 10s';
-  if (el.brewModalSub) {
-    el.brewModalSub.textContent = `Temperature locked at ${getTempLabel(state.lastBrewTemp)} (Manual p. 11). Top up before capsule ejects:`;
-  }
-  if (el.soakControlBox) el.soakControlBox.classList.add('hidden');
-  if (el.btnStopBrew) el.btnStopBrew.classList.add('hidden');
-  if (el.postBrewBox) el.postBrewBox.classList.remove('hidden');
-  if (el.postBrewTimerBadge) el.postBrewTimerBadge.textContent = '10s';
-  if (el.brewModal) el.brewModal.classList.remove('hidden');
-
-  state.postBrewInterval = setInterval(() => {
-    state.postBrewRemainingSec = Math.max(0, state.postBrewRemainingSec - 1);
-    if (el.postBrewTimerBadge) el.postBrewTimerBadge.textContent = `${state.postBrewRemainingSec}s`;
-    if (el.brewModalTitle) el.brewModalTitle.textContent = `Brew Complete — Auto-Eject in ${state.postBrewRemainingSec}s`;
-    if (el.brewProgressBar) el.brewProgressBar.style.width = `${state.postBrewRemainingSec * 10}%`;
-    if (state.postBrewRemainingSec <= 0) {
+  if (el.brewModalTitle) el.brewModalTitle.textContent = 'Brew Complete';
+  setTimeout(() => {
+    if (!state.activeWorkflow && !state.pendingStage2Split && !state.isBrewing) {
       dismissPostBrewModal();
     }
-  }, 1000);
+  }, 600);
 }
 
 function calculateBrewDuration(sizeCode) {
