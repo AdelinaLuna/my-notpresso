@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.10';
+const APP_VERSION = '0.13.11';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -1166,7 +1166,7 @@ function decodeCommandResponse(bytes) {
     log(`[06aa3a52 CommandResponse] ACK / DONE (${hex})`, 'rx');
   } else if (respCode === 0x36) {
     rejectCommand('Command rejected: Volume out of hardware range (0x36).');
-  } else if (respCode === 0x24 || (bytes[0] & 0xC0) === 0xC0) {
+  } else if (respCode === 0x24) {
     const reason = CONDITION_NOT_FULFILLED_REASONS[subCode] || `Condition not fulfilled (0x24, subcode 0x${subCode.toString(16)})`;
     rejectCommand(reason);
   } else {

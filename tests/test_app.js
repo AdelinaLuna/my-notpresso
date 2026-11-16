@@ -1345,6 +1345,21 @@ test('Fix [#29]: #logConsole trims oldest entries beyond MAX_LOG_ENTRIES', () =>
   assert.match(el.logConsole.children[maxEntries - 1].textContent, new RegExp(`msg-${maxEntries + 25}$`));
 });
 
+test('Fix [#21]: Non-0x24 CommandResponse frames with 0xC0 header bits do not trigger fake rejection', () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const el = h.getEl();
+  state.activeWorkflow = { type: 'two-stage-split', stage: 1 };
+  el.brewModal.classList.remove('hidden');
+
+  const statusFrame = new Uint8Array([0xC0, 0x00, 0x01, 0x22, 0x00, 0x04, ...new Array(14).fill(0)]);
+  h.ctx.decodeCommandResponse(statusFrame);
+
+  assert.notEqual(state.activeWorkflow, null);
+  assert.equal(el.brewModal.classList.contains('hidden'), false);
+  assert.equal(el.ledTelematicsBanner.classList.contains('led-state-err'), false);
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;
