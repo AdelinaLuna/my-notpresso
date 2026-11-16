@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.14.6';
+const APP_VERSION = '0.14.7';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -1266,6 +1266,17 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     updateDescaleGuideUI();
     const stateLabel = (MACHINE_STATES[state.machineState] || {}).label || `State ${state.machineState}`;
     log(`[06aa3a22 Slider] ${isOpen ? 'OPEN' : 'CLOSED'} (${bytesToHex(bytes)}) | lid=${isOpen ? 'OPEN' : 'CLOSED'}, state=${stateLabel}`, 'rx');
+    const pending = state.pendingStage2Split;
+    if (pending && pending.awaitingSliderCycle) {
+      if (isOpen) {
+        pending.sawSliderOpen = true;
+        if (el.brewModalSub) el.brewModalSub.textContent = `Slider open — close slider to launch ${pending.stage2.label}`;
+      } else if (pending.sawSliderOpen) {
+        pending.awaitingSliderCycle = false;
+        log(`Slider cycled (OPEN -> CLOSED); auto-launching Stage 2: ${pending.stage2.label}`, 'info');
+        launchSplitTempStage2(pending, true);
+      }
+    }
 
   } else if (uuid === BLE_UUIDS.CHAR_AUTH_TYPE) {
     const code = bytes[0];
@@ -1361,6 +1372,7 @@ function decodeCommandResponse(bytes) {
     log(`[06aa3a52 Command Rejected] ${reason} (${hex})`, 'err');
     const wasRinse = !!(state.activeWorkflow && state.activeWorkflow.type === 'system-rinse');
     state.activeWorkflow = null;
+    state.pendingStage2Split = null;
     clearInterval(state.soakInterval);
     el.soakControlBox.classList.add('hidden');
     finishBrewTracking({ immediate: true });
@@ -1381,6 +1393,18 @@ function decodeCommandResponse(bytes) {
   if (respCode === 0x36) {
     rejectCommand('Command rejected: Volume out of hardware range (0x36).');
   } else if (respCode === 0x24) {
+    if (subCode === 0x12 && state.pendingStage2Split && !state.pendingStage2Split.awaitingSliderCycle) {
+      const pending = state.pendingStage2Split;
+      pending.awaitingSliderCycle = true;
+      pending.sawSliderOpen = false;
+      clearInterval(state.brewInterval);
+      state.isBrewing = false;
+      if (el.brewModalTitle) el.brewModalTitle.textContent = 'Open & Close Slider for Stage 2';
+      if (el.brewModalSub) el.brewModalSub.textContent = `Hardware requires slider cycle before ${pending.stage2.label}. Open & close slider now...`;
+      log(`[06aa3a52] Stage 2 paused (0x24 0x12): waiting for slider OPEN -> CLOSED before ${pending.stage2.label} (${hex})`, 'warn');
+      showToast('Open & close slider to start Stage 2!');
+      return;
+    }
     const reason = CONDITION_NOT_FULFILLED_REASONS[subCode] || `Condition not fulfilled (0x24, subcode 0x${subCode.toString(16)})`;
     rejectCommand(reason);
   } else if (respCode === 0x20 || (bytes[0] & 0xF0) === 0x80) {
@@ -1405,6 +1429,7 @@ function onDisconnected() {
   state.isScanning = false;
   state.isBrewing = false;
   state.activeWorkflow = null;
+  state.pendingStage2Split = null;
   state.lastTelematicsTitle = null;
   clearInterval(state.brewInterval);
   clearInterval(state.soakInterval);
@@ -1742,6 +1767,7 @@ async function launchSplitTempStage2(wf, withSettleDelay = false) {
   wf.stage2Triggered = true;
   const s2 = wf.stage2;
   state.activeWorkflow = null;
+  state.pendingStage2Split = wf;
   try {
     log(`Launching Stage 2 (${withSettleDelay ? 'READY transition' : 'fallback timer'}): ${s2.label}`, 'info');
     if (withSettleDelay) {
@@ -1749,6 +1775,7 @@ async function launchSplitTempStage2(wf, withSettleDelay = false) {
     }
     await sendSingleStageCustomBrew(s2.coffeeMl, s2.waterMl, s2.temp, 'coffee-first', s2.label);
   } catch (err) {
+    state.pendingStage2Split = null;
     finishBrewTracking({ immediate: true });
     log(`Split-temp Stage 2 error: ${err.message}`, 'err');
     showToast(`Stage 2 error: ${err.message}`);
@@ -1759,6 +1786,9 @@ async function handleWorkflowStatusUpdate(prevState, newState, waterTankEmpty) {
   const wf = state.activeWorkflow;
   if (wf && newState === 4) {
     wf.sawBrewing = true;
+  }
+  if (newState === 4 && state.pendingStage2Split && !state.pendingStage2Split.awaitingSliderCycle) {
+    state.pendingStage2Split = null;
   }
   const finishedBrewing = (prevState === 4 || !!(wf && wf.sawBrewing)) && newState === 2;
 

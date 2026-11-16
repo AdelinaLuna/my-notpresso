@@ -1762,6 +1762,46 @@ test('Fix [v0.14.5]: Quick calibration profiles do not overwrite machineDialVolu
   assert.equal(el.btnProfileAppCalibration.classList.contains('active-chip'), true);
 });
 
+test('Fix [v0.14.7]: 2-stage split pauses cleanly on 0x24 0x12 and auto-launches Stage 2 on slider OPEN -> CLOSED', async () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const el = h.getEl();
+  const uuids = h.eval('BLE_UUIDS');
+  h.ctx.sleep = async () => {};
+
+  const txs = [];
+  state.isConnected = true;
+  state.characteristics.set(uuids.CHAR_COMMAND, {});
+  h.ctx.writeBleCharacteristic = async (_uuid, bytes) => {
+    txs.push(Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''));
+  };
+
+  const wf = {
+    type: 'two-stage-split',
+    stage: 1,
+    stage2Triggered: false,
+    stage2: { coffeeMl: 15, waterMl: 0, temp: 2, label: 'Stage 2/2: 15ml Coffee (Max ~90°C)' }
+  };
+  await h.ctx.launchSplitTempStage2(wf, false);
+  assert.equal(txs.length, 2);
+
+  // Machine rejects Stage 2 with 0x24 0x12 (SLIDER_NOT_BEEN_OPENED): modal stays open awaiting slider cycle
+  txs.length = 0;
+  h.ctx.decodeCommandResponse(new Uint8Array([0xC3, 0x05, 0x02, 0x24, 0x12, ...new Array(15).fill(0)]));
+  assert.equal(wf.awaitingSliderCycle, true);
+  assert.equal(el.brewModal.classList.contains('hidden'), false);
+  assert.match(el.brewModalTitle.textContent, /Open & Close Slider for Stage 2/);
+
+  // Cycling slider OPEN (00) then CLOSED (02) automatically re-triggers Stage 2
+  h.ctx.handleRawCharacteristicBytes(uuids.CHAR_SLIDER, new Uint8Array([0x00]));
+  assert.equal(wf.sawSliderOpen, true);
+  assert.equal(txs.length, 0);
+  h.ctx.handleRawCharacteristicBytes(uuids.CHAR_SLIDER, new Uint8Array([0x02]));
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(wf.awaitingSliderCycle, false);
+  assert.equal(txs.length, 2);
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;
