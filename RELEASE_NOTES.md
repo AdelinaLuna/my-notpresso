@@ -8,7 +8,7 @@ Version history for **Notpresso Expert (`EN 350.G`)**, tracking `APP_VERSION` in
 
 High-level user benefits across meaningful releases (newest first):
 
-- **`v0.13.8 – v0.13.13`** — Fixes **Great Americano XL** & multi-stage brew handoffs, recovers cleanly from mid-brew BLE write failures, fixes **Rotary Dial slots** (`Americano` & `Hot Water`), and adds **Copy Logs**.
+- **`v0.13.8 – v0.13.14`** — Fixes **Great Americano XL** & multi-stage brew handoffs, aligns **Rotary Dial slots** (`Americano Coffee/Water` & `Hot Water`), removes false `0xC0` alerts & duplicate disconnect logs, and adds newline-preserving **Copy Logs**.
 - **`v0.13.7`** — Long-pressing the header logo to force a cache refresh now takes **3 seconds instead of 5** (`LOGO_HOLD_REFRESH_SEC`).
 - **`v0.13.5 – v0.13.6`** — Your active rotary-dial profile (`My App Calibration` / `Factory Defaults`) and machine-synced cup sizes now stay consistent across Machine, Presets, and Custom views automatically—offline or connected.
 - **`v0.13.0 – v0.13.4`** — Pick separate temperatures (`Warm 80°C`, `Hot 85°C`, `Max 90°C`) per coffee/water stage, swap pour order safely with a one-tap Swap button, and see known cup tags like `(Lungo) 80 ml` right beside sliders.
@@ -31,6 +31,10 @@ High-level user benefits across meaningful releases (newest first):
 ## 2. Detailed Technical Changelog (Per-Version)
 
 > **Maintenance rule:** Every patch, minor, or major increment of `APP_VERSION` in `app.js` receives an entry below detailing commits, protocol/UI changes, and verification coverage.
+
+### `v0.13.14` — `2026-11-16`
+- **`app.js`**: Guarded `onDisconnected()` against redundant invokes, stored stable notification handlers in `notifyHandlers`, and detached existing `gattserverdisconnected` / `characteristicvaluechanged` listeners across disconnect and reconnect (Fixes `#25`).
+- **`tests/test_app.js`**: Added `Fix [#25]` verifying single disconnect logging and non-stacking characteristic listeners on reconnect.
 
 ### `v0.13.13` — `2026-11-16`
 - **`app.js`**: Extracted shared `launchSplitTempStage2()` helper and wrapped async workflow transitions in `handleRawCharacteristicBytes()` and `startBrewTracking()` fallback timers with error recovery so GATT errors clear workflow state instead of wedging UI (Fixes `#22`).

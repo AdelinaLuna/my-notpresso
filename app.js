@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.13';
+const APP_VERSION = '0.13.14';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -615,6 +615,7 @@ function persistSavedRecipes() {
 
 // 7. BLE Read / Write / Connect Abstraction
 let gattQueue = Promise.resolve();
+const notifyHandlers = new Map();
 function enqueueGattOp(fn) {
   const next = gattQueue.then(fn, fn);
   gattQueue = next.catch(() => {});
@@ -674,7 +675,13 @@ async function connectBle() {
       ]
     });
 
+    if (state.device && typeof state.device.removeEventListener === 'function') {
+      state.device.removeEventListener('gattserverdisconnected', onDisconnected);
+    }
     state.device = device;
+    if (typeof device.removeEventListener === 'function') {
+      device.removeEventListener('gattserverdisconnected', onDisconnected);
+    }
     device.addEventListener('gattserverdisconnected', onDisconnected);
 
     log(`Selected "${device.name || 'Nespresso Expert'}". Connecting GATT...`, 'info');
@@ -744,9 +751,15 @@ async function discoverAllCharacteristics(server) {
     if (ch) {
       try {
         await ch.startNotifications();
-        ch.addEventListener('characteristicvaluechanged', (ev) => {
-          handleRawCharacteristicBytes(notifyUuid, new Uint8Array(ev.target.value.buffer));
-        });
+        let handler = notifyHandlers.get(notifyUuid);
+        if (!handler) {
+          handler = (ev) => handleRawCharacteristicBytes(notifyUuid, new Uint8Array(ev.target.value.buffer));
+          notifyHandlers.set(notifyUuid, handler);
+        }
+        if (typeof ch.removeEventListener === 'function') {
+          ch.removeEventListener('characteristicvaluechanged', handler);
+        }
+        ch.addEventListener('characteristicvaluechanged', handler);
         log(`Subscribed to notifications on ${notifyUuid.substring(4, 8)}`, 'info');
       } catch (e) {
         log(`Notify ${notifyUuid.substring(4, 8)} note: ${e.message}`, 'warn');
@@ -1187,6 +1200,9 @@ async function disconnectBle() {
 }
 
 function onDisconnected() {
+  if (!state.isConnected && !state.isScanning && !state.isBrewing && !state.activeWorkflow && state.characteristics.size === 0) {
+    return;
+  }
   state.isConnected = false;
   state.isScanning = false;
   state.isBrewing = false;
@@ -1197,6 +1213,12 @@ function onDisconnected() {
   if (el.soakControlBox) el.soakControlBox.classList.add('hidden');
   if (el.brewModal) el.brewModal.classList.add('hidden');
   updateSystemRinseUI('Idle (5 Shots)', 'Ready to run automated 5-shot purge: Shots 1–3 Lungo (coffee outlet) → Shots 4–5 Hot Water (dedicated water spout).', false);
+  state.characteristics.forEach((ch, uuid) => {
+    const handler = notifyHandlers.get(uuid);
+    if (handler && typeof ch.removeEventListener === 'function') {
+      ch.removeEventListener('characteristicvaluechanged', handler);
+    }
+  });
   state.characteristics.clear();
   updateConnectionUI();
   log('Disconnected from machine.', 'warn');

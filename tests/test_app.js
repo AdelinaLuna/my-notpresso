@@ -1388,6 +1388,55 @@ test('Fix [#22]: Split-temp Stage 2 GATT rejection clears workflow cleanly inste
   assert.match(el.toast.textContent, /Stage 2 error: GATT write failed/);
 });
 
+test('Fix [#25]: disconnectBle logs once and reconnect does not stack characteristic listeners', async () => {
+  const charListeners = new Set();
+  let connected = true;
+  const statusChar = {
+    async readValue() { return { buffer: new Uint8Array([0, 2, 0, 0, 0, 0]).buffer }; },
+    async writeValueWithResponse() {},
+    async startNotifications() {},
+    addEventListener(type, fn) { if (type === 'characteristicvaluechanged') charListeners.add(fn); },
+    removeEventListener(type, fn) { if (type === 'characteristicvaluechanged') charListeners.delete(fn); }
+  };
+  const deviceListeners = new Set();
+  const mockDevice = {
+    name: 'Expert-Reconnect',
+    addEventListener(type, fn) { if (type === 'gattserverdisconnected') deviceListeners.add(fn); },
+    removeEventListener(type, fn) { if (type === 'gattserverdisconnected') deviceListeners.delete(fn); },
+    gatt: {
+      get connected() { return connected; },
+      async connect() {
+        connected = true;
+        return { async getPrimaryService() { return { async getCharacteristic() { return statusChar; } }; } };
+      },
+      disconnect() {
+        connected = false;
+        for (const fn of Array.from(deviceListeners)) fn();
+      }
+    }
+  };
+
+  const h = createAppHarness({
+    navigator: { bluetooth: { requestDevice: async () => mockDevice } }
+  });
+  const el = h.getEl();
+  h.ctx.sleep = async () => {};
+
+  await h.ctx.connectBle();
+  await h.ctx.disconnectBle();
+  // Calling onDisconnected again (e.g. delayed native event) must be ignored
+  h.ctx.onDisconnected();
+
+  const disconnectLogs = Array.from(el.logConsole.children).filter(n => n.textContent.includes('Disconnected from machine.'));
+  assert.equal(disconnectLogs.length, 1);
+  assert.equal(charListeners.size, 0);
+
+  // Reconnect twice on same cached device must keep exactly 1 listener per notify UUID (3 total)
+  await h.ctx.connectBle();
+  assert.equal(deviceListeners.size, 1);
+  assert.equal(charListeners.size, 3);
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;
