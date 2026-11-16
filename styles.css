@@ -1306,6 +1306,71 @@ body {
   flex-direction: column;
 }
 
+.stock-panel {
+  margin-top: 14px;
+  padding: 12px;
+  background: var(--bg-chip);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.stock-panel.is-disabled .stock-gauge-track {
+  opacity: 0.35;
+}
+
+.stock-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+}
+
+.stock-badge.stock-ok {
+  color: var(--accent-green);
+  background: rgba(52, 199, 89, 0.12);
+  border-color: rgba(52, 199, 89, 0.35);
+}
+
+.stock-badge.stock-low {
+  color: var(--accent-orange);
+  background: rgba(255, 149, 0, 0.12);
+  border-color: rgba(255, 149, 0, 0.35);
+}
+
+.stock-badge.stock-empty {
+  color: var(--accent-red);
+  background: rgba(255, 59, 48, 0.12);
+  border-color: rgba(255, 59, 48, 0.35);
+}
+
+.stock-gauge-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.stock-gauge-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-gold);
+  transition: width 0.25s ease, background-color 0.2s ease;
+}
+
+.stock-gauge-fill.stock-ok { background: var(--accent-green); }
+.stock-gauge-fill.stock-low { background: var(--accent-orange); }
+.stock-gauge-fill.stock-empty { background: var(--accent-red); }
+
+.stock-step-chip {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
 .soak-control-box {
   width: 100%;
   background: rgba(200, 141, 75, 0.1);

@@ -8,6 +8,7 @@ Version history for **Notpresso Expert (`EN 350.G`)**, tracking `APP_VERSION` in
 
 High-level user benefits across meaningful releases (newest first):
 
+- **`v0.14.0`** — Redesigns **Capsule Stock & Alerts** with a live gauge, status badges (`Tracking Off` / `Low Alert` / `LED ON`), sleeve quick-steppers (`-10 / +10 / +50`), and live UI/input sync on every read or brew.
 - **`v0.13.8 – v0.13.17`** — Fixes **Great Americano XL** & multi-stage brew handoffs, aligns **Rotary Dial slots** (`Americano Coffee/Water` & `Hot Water`) with connect-time dial logging, removes false `0xC0` alerts, duplicate disconnect logs, and legacy hidden controls, deduplicates temperature helpers, and adds newline-preserving **Copy Logs**.
 - **`v0.13.7`** — Long-pressing the header logo to force a cache refresh now takes **3 seconds instead of 5** (`LOGO_HOLD_REFRESH_SEC`).
 - **`v0.13.5 – v0.13.6`** — Your active rotary-dial profile (`My App Calibration` / `Factory Defaults`) and machine-synced cup sizes now stay consistent across Machine, Presets, and Custom views automatically—offline or connected.
@@ -31,6 +32,10 @@ High-level user benefits across meaningful releases (newest first):
 ## 2. Detailed Technical Changelog (Per-Version)
 
 > **Maintenance rule:** Every patch, minor, or major increment of `APP_VERSION` in `app.js` receives an entry below detailing commits, protocol/UI changes, and verification coverage.
+
+### `v0.14.0` — `2026-11-16`
+- **`index.html`, `styles.css`, `app.js`**: Upgraded Capsule Stock & Low-Stock Threshold UI into `#stockPanel` with live status pill (`#badgeStockStatus`), stock level gauge (`#stockGaugeFill`), threshold pill (`#badgeThresholdStatus`), and sleeve steppers (`-10`, `+10`, `+50`); replaced raw hex labels (`06aa3a15`, `Disable (FFFF)` -> `Turn Off`); synced `#inputStockCount`, `#chipPairingState`, and `0xFFFF` disabled threshold states across telemetry notifications and manual reads.
+- **`tests/test_app.js`**: Expanded `Feature [#13]` to verify live UI/input/gauge sync on machine reads, disabled (`0xFFFF`) input/threshold clearing, and low-stock alert badge transitions.
 
 ### `v0.13.17` — `2026-11-16`
 - **`app.js`**: Consolidated `getTempLabel()`, `getShortTempLabel()`, and `renderStageTempButtonsHtml()` onto a single `TEMP_MODES` table (Fixes `#30`).

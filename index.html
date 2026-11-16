@@ -502,28 +502,47 @@
           </small>
         </div>
 
-        <div class="form-group" style="margin-top:14px; margin-bottom:0;">
-          <label class="form-label" for="inputStockCount">Capsule Stock Counter (`06aa3a15`, `0–1000`)</label>
-          <div class="btn-row" style="margin-top:6px;">
-            <input type="number" id="inputStockCount" class="styled-input" min="0" max="1000" step="1" value="50" style="flex:1;">
-            <button id="btnReadStock" class="btn btn-outline" style="padding:10px 12px;">Read</button>
-            <button id="btnWriteStock" class="btn btn-primary" style="flex:1.1; padding:10px;">Set Stock</button>
-            <button id="btnDisableStock" class="btn btn-outline" style="padding:10px 12px;">Disable (FFFF)</button>
+        <div id="stockPanel" class="stock-panel">
+          <div class="slider-header" style="margin-bottom:8px;">
+            <label class="form-label" for="inputStockCount" style="margin-bottom:0;">☕ Capsule Stock &amp; Alerts</label>
+            <span id="badgeStockStatus" class="stock-badge">Not synced</span>
           </div>
-          <small class="field-hint">
-            Machine counts down each capsule brew. The front <strong>Nespresso Light</strong> turns on when stock hits <code>0</code>, or stays off when disabled with <code>0xFFFF</code>.
-          </small>
-        </div>
 
-        <div class="form-group" style="margin-top:14px; margin-bottom:0;">
-          <label class="form-label" for="inputStockThreshold">Low-Stock Warning Threshold (`06aa3a25`, `0–1000`)</label>
-          <div class="btn-row" style="margin-top:6px;">
-            <input type="number" id="inputStockThreshold" class="styled-input" min="0" max="1000" step="1" value="10" style="flex:1;">
-            <button id="btnReadStockThreshold" class="btn btn-outline" style="padding:10px 12px;">Read</button>
-            <button id="btnWriteStockThreshold" class="btn btn-primary" style="flex:1.1; padding:10px;">Set Threshold</button>
+          <div class="stock-gauge-track" aria-hidden="true">
+            <div id="stockGaugeFill" class="stock-gauge-fill" style="width:0%;"></div>
           </div>
-          <small class="field-hint">
-            Triggers the telemetry low-stock warning bit when capsule count drops to or below this threshold.
+
+          <div class="stock-control-block">
+            <div class="slider-header" style="margin-bottom:4px;">
+              <span class="chip-label">Remaining Capsules</span>
+              <div class="quick-chips-row" style="gap:4px;">
+                <button type="button" class="chip-btn stock-step-chip" data-stock-delta="-10">−10</button>
+                <button type="button" class="chip-btn stock-step-chip" data-stock-delta="10">+10</button>
+                <button type="button" class="chip-btn stock-step-chip" data-stock-delta="50">+50</button>
+              </div>
+            </div>
+            <div class="btn-row">
+              <input type="number" id="inputStockCount" class="styled-input" min="0" max="1000" step="1" value="" placeholder="Off" style="flex:1;">
+              <button id="btnReadStock" class="btn btn-outline" style="padding:10px 12px;">Read</button>
+              <button id="btnWriteStock" class="btn btn-primary" style="flex:1; padding:10px;">Save</button>
+              <button id="btnDisableStock" class="btn btn-outline" style="padding:10px 12px;">Turn Off</button>
+            </div>
+          </div>
+
+          <div class="stock-control-block" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border-subtle);">
+            <div class="slider-header" style="margin-bottom:4px;">
+              <label class="chip-label" for="inputStockThreshold">Low-Stock Alert Threshold</label>
+              <span id="badgeThresholdStatus" class="mini-pill">--</span>
+            </div>
+            <div class="btn-row">
+              <input type="number" id="inputStockThreshold" class="styled-input" min="0" max="1000" step="1" value="10" style="flex:1;">
+              <button id="btnReadStockThreshold" class="btn btn-outline" style="padding:10px 12px;">Read</button>
+              <button id="btnWriteStockThreshold" class="btn btn-primary" style="flex:1.1; padding:10px;">Save Alert</button>
+            </div>
+          </div>
+
+          <small class="field-hint" style="margin-top:8px;">
+            Machine counts down each capsule brew automatically and lights the front <strong>Nespresso</strong> indicator at threshold or <code>0</code>.
           </small>
         </div>
 

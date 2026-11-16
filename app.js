@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.17';
+const APP_VERSION = '0.14.0';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -279,6 +279,10 @@ const el = {
   valDescaleStatus: document.getElementById('valDescaleStatus'),
   valStockThreshold: document.getElementById('valStockThreshold'),
   valFaultRecord: document.getElementById('valFaultRecord'),
+  stockPanel: document.getElementById('stockPanel'),
+  badgeStockStatus: document.getElementById('badgeStockStatus'),
+  stockGaugeFill: document.getElementById('stockGaugeFill'),
+  badgeThresholdStatus: document.getElementById('badgeThresholdStatus'),
   inputStockCount: document.getElementById('inputStockCount'),
   btnReadStock: document.getElementById('btnReadStock'),
   btnWriteStock: document.getElementById('btnWriteStock'),
@@ -864,21 +868,78 @@ function getBitBoolean(bytes, bitIndex) {
 
 function updateCapsuleStockDisplay(stockVal, syncInput = false) {
   state.capsuleStock = stockVal;
+  const isDisabled = stockVal === null;
+  const thresh = state.capsuleStockThreshold;
+  const isLow = !isDisabled && stockVal > 0 && ((thresh !== null && stockVal <= thresh) || state.capsuleStockLow);
+
   if (el.valStockCounter) {
-    if (stockVal === null) {
+    if (isDisabled) {
       el.valStockCounter.textContent = 'Disabled';
     } else {
       el.valStockCounter.textContent = stockVal === 0 ? '0 caps (LED ON)' : `${stockVal} caps`;
     }
   }
-  if (syncInput && stockVal !== null && el.inputStockCount) {
-    el.inputStockCount.value = stockVal;
+
+  if (el.stockPanel) {
+    el.stockPanel.classList.toggle('is-disabled', isDisabled);
+  }
+
+  let statusClass = '';
+  let statusText = 'Tracking Off';
+  if (!isDisabled) {
+    if (stockVal === 0) {
+      statusClass = 'stock-empty';
+      statusText = '0 left • LED ON';
+    } else if (isLow) {
+      statusClass = 'stock-low';
+      statusText = `${stockVal} left • Low Alert`;
+    } else {
+      statusClass = 'stock-ok';
+      statusText = `${stockVal} left`;
+    }
+  }
+  if (el.badgeStockStatus) {
+    el.badgeStockStatus.textContent = statusText;
+    el.badgeStockStatus.className = `stock-badge${statusClass ? ` ${statusClass}` : ''}`;
+  }
+  if (el.stockGaugeFill) {
+    const scaleMax = Math.max(100, (thresh || 0) * 4, isDisabled ? 0 : stockVal);
+    const pct = isDisabled || stockVal === 0 ? 0 : Math.max(4, Math.min(100, Math.round((stockVal / scaleMax) * 100)));
+    el.stockGaugeFill.style.width = `${pct}%`;
+    el.stockGaugeFill.className = `stock-gauge-fill${statusClass ? ` ${statusClass}` : ''}`;
+  }
+
+  const inputNotFocused = typeof document === 'undefined' || document.activeElement !== el.inputStockCount;
+  if ((syncInput || inputNotFocused) && el.inputStockCount) {
+    el.inputStockCount.value = isDisabled ? '' : String(stockVal);
+  }
+
+  if (el.chipPairingState && state.pairingKeyStateByte === 2) {
+    el.chipPairingState.textContent = !isDisabled && stockVal < 1023 ? `Auth OK • ${stockVal}` : 'Auth OK (2)';
   }
 }
 
 function parseStockThresholdBytes(bytes) {
   if (!bytes || bytes.length < 2) return null;
-  return ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
+  const raw = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
+  return raw > 1000 ? null : raw;
+}
+
+function updateStockThresholdDisplay(threshVal, syncInput = false) {
+  state.capsuleStockThreshold = threshVal;
+  if (el.valStockThreshold) {
+    el.valStockThreshold.textContent = threshVal === null ? 'Off' : `${threshVal} caps`;
+  }
+  if (el.badgeThresholdStatus) {
+    el.badgeThresholdStatus.textContent = threshVal === null ? 'Alert Off' : `Alert ≤ ${threshVal}`;
+  }
+  const inputNotFocused = typeof document === 'undefined' || document.activeElement !== el.inputStockThreshold;
+  if ((syncInput || inputNotFocused) && el.inputStockThreshold) {
+    el.inputStockThreshold.value = threshVal === null ? '' : String(threshVal);
+  }
+  if (state.capsuleStock !== null) {
+    updateCapsuleStockDisplay(state.capsuleStock, false);
+  }
 }
 
 function parseFaultRecordBytes(bytes, slotIdx = 0) {
@@ -1142,10 +1203,8 @@ function handleRawCharacteristicBytes(uuid, bytes) {
 
   } else if (uuid === BLE_UUIDS.CHAR_STOCK_THRESHOLD && bytes.length >= 2) {
     const thresh = parseStockThresholdBytes(bytes);
-    state.capsuleStockThreshold = thresh;
-    if (el.valStockThreshold) el.valStockThreshold.textContent = `${thresh} caps`;
-    if (el.inputStockThreshold && thresh <= 1000) el.inputStockThreshold.value = thresh;
-    log(`[06aa3a25 StockThreshold] ${thresh} capsules (${bytesToHex(bytes)})`, 'rx');
+    updateStockThresholdDisplay(thresh, true);
+    log(`[06aa3a25 StockThreshold] ${thresh === null ? 'DISABLED' : `${thresh} capsules`} (${bytesToHex(bytes)})`, 'rx');
 
   } else if (uuid === BLE_UUIDS.CHAR_ERROR_INFO && bytes.length >= 2) {
     const rec = parseFaultRecordBytes(bytes, state.selectedErrorSlot);
@@ -1887,8 +1946,8 @@ async function disableCapsuleStock() {
   log(`Disabling Capsule Stock (0xFFFF) on 06aa3a15: ${bytesToHex(payload)}`, 'tx');
   try {
     await writeBleCharacteristic(BLE_UUIDS.CHAR_STOCK, payload);
-    updateCapsuleStockDisplay(null, false);
-    showToast('Capsule stock tracking disabled (0xFFFF)!');
+    updateCapsuleStockDisplay(null, true);
+    showToast('Capsule stock tracking disabled');
   } catch (err) {
     log(`Disable 06aa3a15 error: ${err.message}`, 'err');
     showToast(`Error: ${err.message}`);
@@ -1904,7 +1963,9 @@ async function readStockThreshold() {
     const bytes = await readBleCharacteristic(BLE_UUIDS.CHAR_STOCK_THRESHOLD);
     if (bytes) {
       handleRawCharacteristicBytes(BLE_UUIDS.CHAR_STOCK_THRESHOLD, bytes);
-      showToast(`Low-stock threshold: ${state.capsuleStockThreshold} capsules`);
+      showToast(state.capsuleStockThreshold === null
+        ? 'Low-stock alert is disabled'
+        : `Low-stock threshold: ${state.capsuleStockThreshold} capsules`);
     }
   } catch (err) {
     log(`Read 06aa3a25 error: ${err.message}`, 'err');
@@ -1919,13 +1980,11 @@ async function writeStockThreshold() {
   }
   const parsed = parseInt(el.inputStockThreshold ? el.inputStockThreshold.value : '10', 10);
   const thresh = Math.max(0, Math.min(1000, Number.isNaN(parsed) ? 10 : parsed));
-  if (el.inputStockThreshold) el.inputStockThreshold.value = thresh;
   const payload = new Uint8Array([(thresh >> 8) & 0xFF, thresh & 0xFF]);
   log(`Writing Low-Stock Threshold (${thresh}) to 06aa3a25: ${bytesToHex(payload)}`, 'tx');
   try {
     await writeBleCharacteristic(BLE_UUIDS.CHAR_STOCK_THRESHOLD, payload);
-    state.capsuleStockThreshold = thresh;
-    if (el.valStockThreshold) el.valStockThreshold.textContent = `${thresh} caps`;
+    updateStockThresholdDisplay(thresh, true);
     showToast(`Low-stock warning threshold set to ${thresh}!`);
   } catch (err) {
     log(`Write 06aa3a25 error: ${err.message}`, 'err');
@@ -3775,6 +3834,15 @@ function initListeners() {
   if (el.btnReadStock) el.btnReadStock.addEventListener('click', readCapsuleStock);
   if (el.btnWriteStock) el.btnWriteStock.addEventListener('click', writeCapsuleStock);
   if (el.btnDisableStock) el.btnDisableStock.addEventListener('click', disableCapsuleStock);
+  document.querySelectorAll('.stock-step-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!el.inputStockCount) return;
+      const cur = parseInt(el.inputStockCount.value, 10);
+      const base = Number.isNaN(cur) ? (state.capsuleStock || 0) : cur;
+      const next = Math.max(0, Math.min(1000, base + parseInt(btn.dataset.stockDelta, 10)));
+      el.inputStockCount.value = String(next);
+    });
+  });
   if (el.btnReadStockThreshold) el.btnReadStockThreshold.addEventListener('click', readStockThreshold);
   if (el.btnWriteStockThreshold) el.btnWriteStockThreshold.addEventListener('click', writeStockThreshold);
   if (el.btnReadErrorSlot) el.btnReadErrorSlot.addEventListener('click', readErrorLogSlot);

@@ -854,17 +854,46 @@ test('Feature [#13]: Capsule stock counter R/W, clamp 0..1000, and 0xFFFF disabl
   state.isConnected = true;
   h.ctx.writeBleCharacteristic = async (u, b) => txs.push({ u: u.substring(4, 8), hex: h.ctx.bytesToHexNoSpaces(b) });
 
+  h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_STOCK'), new Uint8Array([0x00, 0x20])); // 32 caps
+  assert.equal(state.capsuleStock, 32);
+  assert.equal(el.valStockCounter.textContent, '32 caps');
+  assert.equal(el.badgeStockStatus.textContent, '32 left');
+  assert.equal(el.inputStockCount.value, '32');
+  assert.equal(el.stockPanel.classList.contains('is-disabled'), false);
+
   h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_STOCK'), new Uint8Array([0x00, 0x00]));
   assert.equal(state.capsuleStock, 0);
   assert.equal(el.valStockCounter.textContent, '0 caps (LED ON)');
+  assert.equal(el.badgeStockStatus.textContent, '0 left • LED ON');
+  assert.equal(el.inputStockCount.value, '0');
 
   h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_STOCK'), new Uint8Array([0xFF, 0xFF]));
   assert.equal(state.capsuleStock, null);
   assert.equal(el.valStockCounter.textContent, 'Disabled');
+  assert.equal(el.badgeStockStatus.textContent, 'Tracking Off');
+  assert.equal(el.inputStockCount.value, '');
+  assert.equal(el.stockPanel.classList.contains('is-disabled'), true);
 
   el.inputStockCount.value = '1500'; // Should clamp to 1000 (0x03E8)
   await h.ctx.writeCapsuleStock();
+  assert.equal(el.inputStockCount.value, '1000');
+  assert.equal(el.badgeStockStatus.textContent, '1000 left');
+
   await h.ctx.disableCapsuleStock();
+  assert.equal(el.badgeStockStatus.textContent, 'Tracking Off');
+  assert.equal(el.inputStockCount.value, '');
+
+  // Threshold 0xFFFF parses cleanly as disabled (null / Alert Off) & low-stock marks badge
+  assert.equal(h.ctx.parseStockThresholdBytes(new Uint8Array([0xFF, 0xFF])), null);
+  h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_STOCK_THRESHOLD'), new Uint8Array([0xFF, 0xFF]));
+  assert.equal(el.valStockThreshold.textContent, 'Off');
+  assert.equal(el.badgeThresholdStatus.textContent, 'Alert Off');
+  h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_STOCK_THRESHOLD'), new Uint8Array([0x00, 0x1E])); // 30
+  h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_STOCK'), new Uint8Array([0x00, 0x0F])); // 15 <= 30
+  assert.equal(el.badgeThresholdStatus.textContent, 'Alert ≤ 30');
+  assert.equal(el.badgeStockStatus.textContent, '15 left • Low Alert');
+  assert.equal(el.badgeStockStatus.classList.contains('stock-low'), true);
+
   assert.deepEqual(txs, [
     { u: '3a15', hex: '03E8' },
     { u: '3a15', hex: 'FFFF' }
