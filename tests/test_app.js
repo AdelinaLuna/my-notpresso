@@ -1311,6 +1311,26 @@ test('Feature [v0.13.6]: Offline boot and quick calibration profile toggle sync 
   assert.equal(hReload.ctx.formatPresetVolumeLabel('coffee', 110), '(Lungo) 110 ml');
 });
 
+test('Fix [#24]: Copy Logs exports newline-delimited #logConsole entries only', async () => {
+  let copied = '';
+  const h = createAppHarness({
+    navigator: {
+      clipboard: {
+        writeText: async (text) => { copied = text; }
+      }
+    }
+  });
+  const el = h.getEl();
+  h.ctx.log('Line one', 'info');
+  h.ctx.log('Line two', 'tx');
+
+  await el.btnCopyLogs.dispatchEvent('click');
+  const lines = copied.split('\n');
+  assert.equal(lines.length >= 2, true);
+  assert.match(lines[lines.length - 2], /Line one$/);
+  assert.match(lines[lines.length - 1], /Line two$/);
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;

@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.7';
+const APP_VERSION = '0.13.8';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -372,6 +372,7 @@ const el = {
   btnLogs: document.getElementById('btnLogs'),
   logsDrawer: document.getElementById('logsDrawer'),
   btnCloseLogs: document.getElementById('btnCloseLogs'),
+  btnCopyLogs: document.getElementById('btnCopyLogs'),
   btnClearLogs: document.getElementById('btnClearLogs'),
   logConsole: document.getElementById('logConsole'),
   logCounter: document.getElementById('logCounter'),
@@ -391,6 +392,24 @@ function log(msg, type = 'info') {
   logCount++;
   el.logCounter.textContent = `${logCount} events`;
   console.log(`[Notpresso:${type.toUpperCase()}] ${msg}`);
+}
+
+async function copyLogsToClipboard() {
+  if (!el.logConsole) return;
+  const text = Array.from(el.logConsole.children || []).map(n => n.textContent).filter(Boolean).join('\n');
+  if (!text) {
+    showToast('No logs to copy');
+    return;
+  }
+  try {
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+      throw new Error('Clipboard API unavailable');
+    }
+    await navigator.clipboard.writeText(text);
+    showToast('Logs copied to clipboard');
+  } catch (err) {
+    showToast(`Copy failed: ${err.message}`);
+  }
 }
 
 let toastTimeout = null;
@@ -3844,6 +3863,9 @@ function initListeners() {
   // Logs Drawer
   el.btnLogs.addEventListener('click', () => el.logsDrawer.classList.remove('hidden'));
   el.btnCloseLogs.addEventListener('click', () => el.logsDrawer.classList.add('hidden'));
+  if (el.btnCopyLogs) {
+    el.btnCopyLogs.addEventListener('click', copyLogsToClipboard);
+  }
   el.btnClearLogs.addEventListener('click', () => {
     el.logConsole.innerHTML = '';
     logCount = 0;

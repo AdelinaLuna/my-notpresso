@@ -1082,6 +1082,11 @@ body {
   margin-bottom: 8px;
 }
 
+.logs-toolbar-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .btn-sm {
   background: var(--bg-chip);
   border: 1px solid var(--border-subtle);
@@ -1107,9 +1112,13 @@ body {
   font-family: monospace;
   font-size: 11px;
   line-height: 1.5;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: block;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.log-entry + .log-entry {
+  margin-top: 4px;
 }
 
 .log-entry.info { color: #8E95A5; }
