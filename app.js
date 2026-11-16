@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.14';
+const APP_VERSION = '0.13.15';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -822,7 +822,9 @@ async function readInitialTelemetry() {
       const bytes = await readBleCharacteristic(uuid);
       if (bytes) handleRawCharacteristicBytes(uuid, bytes);
       await sleep(120);
-    } catch (_) {}
+    } catch (err) {
+      log(`Initial read ${uuid.substring(4, 8)} failed: ${err.message}`, 'warn');
+    }
   }
 
   if (state.characteristics.has(BLE_UUIDS.CHAR_CUP_TARGET) && state.characteristics.has(BLE_UUIDS.CHAR_CUP_VOLUME)) {
@@ -835,10 +837,15 @@ async function readInitialTelemetry() {
         if (volBytes && volBytes.length >= 2) {
           const vol = ((volBytes[0] & 0xFF) << 8) | (volBytes[1] & 0xFF);
           applyMachineCupTargetVolume(targetIdx, vol);
+          log(`[06aa3a24 Dial ${targetIdx}] ${vol} ml (${bytesToHex(volBytes)})`, 'rx');
         }
-      } catch (_) {}
+      } catch (err) {
+        log(`Initial dial ${targetIdx} read failed: ${err.message}`, 'warn');
+      }
     }
     state.lastCupTargetIdx = null;
+  } else {
+    log('Rotary dial characteristics (3a14/3a24) not available on this GATT connection.', 'warn');
   }
 }
 

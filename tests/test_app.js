@@ -1437,6 +1437,31 @@ test('Fix [#25]: disconnectBle logs once and reconnect does not stack characteri
   assert.equal(charListeners.size, 3);
 });
 
+test('Fix [#26]: readInitialTelemetry logs dial slot values and warns on read errors', async () => {
+  const h = createAppHarness();
+  const state = h.getState();
+  const el = h.getEl();
+  const uuids = h.eval('BLE_UUIDS');
+  h.ctx.sleep = async () => {};
+
+  state.characteristics.set(uuids.CHAR_CUP_TARGET, {});
+  state.characteristics.set(uuids.CHAR_CUP_VOLUME, {});
+  h.ctx.writeBleCharacteristic = async () => {};
+  h.ctx.readBleCharacteristic = async (uuid) => {
+    if (uuid === uuids.CHAR_CUP_VOLUME) {
+      if (state.lastCupTargetIdx === 1) throw new Error('dial-read-timeout');
+      return new Uint8Array([0x00, 0x50]); // 80 ml
+    }
+    throw new Error('telemetry-unavailable');
+  };
+
+  await h.ctx.readInitialTelemetry();
+  const logs = Array.from(el.logConsole.children).map(n => n.textContent);
+  assert.equal(logs.some(l => l.includes('Initial read 3a12 failed: telemetry-unavailable')), true);
+  assert.equal(logs.some(l => l.includes('[06aa3a24 Dial 0] 80 ml (00 50)')), true);
+  assert.equal(logs.some(l => l.includes('Initial dial 1 read failed: dial-read-timeout')), true);
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;
