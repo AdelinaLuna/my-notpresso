@@ -1484,6 +1484,55 @@ test('Fix [#26]: readInitialTelemetry logs dial slot values and warns on read er
   assert.equal(logs.some(l => l.includes('Initial dial 1 read failed: dial-read-timeout')), true);
 });
 
+test('Fix [v0.14.1]: BLE debug logging covers masked rejections, short/unknown RX, fallbacks, and handshake warns', async () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const el = h.getEl();
+  h.ctx.sleep = async () => {};
+
+  // 1. Rejection bytes[3]=0x24 MUST NOT be masked when bytes[0] has 0x80 high nibble
+  const maskedRej = new Uint8Array([0x81, 0x10, 0x01, 0x24, 0x08, ...new Array(15).fill(0)]);
+  h.ctx.decodeCommandResponse(maskedRej);
+  assert.equal(el.ledTelematicsBanner.classList.contains('led-state-err'), true);
+
+  // 2. Empty/short/unknown RX frames and 06aa3a22 slider log full raw hex
+  h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_SLIDER'), new Uint8Array([0x01, 0x02]));
+  h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_MACHINE_INFO'), new Uint8Array([0x01, 0x02]));
+  h.ctx.handleRawCharacteristicBytes('06aa9999-f22a-11e3-9daa-0002a5d5c51b', new Uint8Array([0xAA, 0xBB]));
+  h.ctx.handleRawCharacteristicBytes(h.eval('BLE_UUIDS.CHAR_STOCK'), new Uint8Array([]));
+
+  // 3. Handshake warns instead of silently swallowing 3a51 / 3a61 errors
+  h.ctx.readBleCharacteristic = async () => { throw new Error('3a51-read-err'); };
+  h.ctx.writeBleCharacteristic = async (uuid) => {
+    if (uuid === h.eval('BLE_UUIDS.CHAR_TX_LEVEL')) throw new Error('3a61-write-err');
+  };
+  await h.ctx.performAuthHandshake(true);
+
+  // 4. Fallback timer logs reason + launches Stage 2
+  h.ctx.startBrewTracking('Stage 1', 'sub', 10);
+  state.machineState = 2;
+  state.brewStartTime = Date.now() - 60_000;
+  state.activeWorkflow = {
+    type: 'two-stage-split',
+    stage: 1,
+    stage2Triggered: false,
+    stage2: { coffeeMl: 40, waterMl: 0, temp: 2, label: 'Stage 2/2: 40ml Coffee' }
+  };
+  const fallbackTimer = Array.from(h.activeIntervals.values()).pop();
+  await fallbackTimer.fn();
+
+  const logs = Array.from(el.logConsole.children).map(n => n.textContent);
+  assert.equal(logs.some(l => l.includes('[06aa3a52 Command Rejected]') && l.includes('81 10 01 24 08')), true);
+  assert.equal(logs.some(l => l.includes('[06aa3a22 Slider] CLOSED (01 02)')), true);
+  assert.equal(logs.some(l => l.includes('[BLE RX 3a21] Unhandled/short (2B): 01 02')), true);
+  assert.equal(logs.some(l => l.includes('[BLE RX 9999] Unhandled/short (2B): AA BB')), true);
+  assert.equal(logs.some(l => l.includes('[BLE RX 3a15] Empty payload')), true);
+  assert.equal(logs.some(l => l.includes('[06aa3a51] Read failed: 3a51-read-err')), true);
+  assert.equal(logs.some(l => l.includes('TX Level [0x01] note: 3a61-write-err')), true);
+  assert.equal(logs.some(l => l.includes('Brew fallback timer fired (workflow=two-stage-split')), true);
+  assert.equal(logs.some(l => l.includes('Launching Stage 2 (fallback timer): Stage 2/2: 40ml Coffee')), true);
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;

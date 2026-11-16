@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.14.0';
+const APP_VERSION = '0.14.1';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -737,7 +737,9 @@ async function discoverAllCharacteristics(server) {
         try {
           const ch = await svc.getCharacteristic(cUuid);
           state.characteristics.set(cUuid, ch);
-        } catch (_) {}
+        } catch (e) {
+          log(`Char ${cUuid.substring(4, 8)} note: ${e.message}`, 'warn');
+        }
       }
     } catch (e) {
       log(`Service ${grp.serviceUuid.substring(4, 8)} note: ${e.message}`, 'warn');
@@ -747,22 +749,24 @@ async function discoverAllCharacteristics(server) {
   // Subscribe to live notifications on MachineStatus (3a12), Slider (3a22), CommandResponse (3a52)
   for (const notifyUuid of [BLE_UUIDS.CHAR_MACHINE_STATUS, BLE_UUIDS.CHAR_SLIDER, BLE_UUIDS.CHAR_CMD_RESPONSE]) {
     const ch = state.characteristics.get(notifyUuid);
-    if (ch) {
-      try {
-        await ch.startNotifications();
-        let handler = notifyHandlers.get(notifyUuid);
-        if (!handler) {
-          handler = (ev) => handleRawCharacteristicBytes(notifyUuid, new Uint8Array(ev.target.value.buffer));
-          notifyHandlers.set(notifyUuid, handler);
-        }
-        if (typeof ch.removeEventListener === 'function') {
-          ch.removeEventListener('characteristicvaluechanged', handler);
-        }
-        ch.addEventListener('characteristicvaluechanged', handler);
-        log(`Subscribed to notifications on ${notifyUuid.substring(4, 8)}`, 'info');
-      } catch (e) {
-        log(`Notify ${notifyUuid.substring(4, 8)} note: ${e.message}`, 'warn');
+    if (!ch) {
+      log(`Notify ${notifyUuid.substring(4, 8)} skipped (characteristic missing)`, 'warn');
+      continue;
+    }
+    try {
+      await ch.startNotifications();
+      let handler = notifyHandlers.get(notifyUuid);
+      if (!handler) {
+        handler = (ev) => handleRawCharacteristicBytes(notifyUuid, new Uint8Array(ev.target.value.buffer));
+        notifyHandlers.set(notifyUuid, handler);
       }
+      if (typeof ch.removeEventListener === 'function') {
+        ch.removeEventListener('characteristicvaluechanged', handler);
+      }
+      ch.addEventListener('characteristicvaluechanged', handler);
+      log(`Subscribed to notifications on ${notifyUuid.substring(4, 8)}`, 'info');
+    } catch (e) {
+      log(`Notify ${notifyUuid.substring(4, 8)} note: ${e.message}`, 'warn');
     }
   }
 }
@@ -776,15 +780,21 @@ async function performAuthHandshake(forceOnboarding = false) {
     if (keyBytes && keyBytes.length >= 1) {
       state.pairingKeyStateByte = keyBytes[0];
       log(`[06aa3a51] PairingKeyState = ${keyBytes[0]} (${keyBytes[0] === 2 ? 'PRESENT' : 'ABSENT'})`, 'rx');
+    } else {
+      log('[06aa3a51] Empty PairingKeyState response', 'warn');
     }
-  } catch (_) {}
+  } catch (e) {
+    log(`[06aa3a51] Read failed: ${e.message}`, 'warn');
+  }
 
   if (forceOnboarding || state.pairingKeyStateByte === 0 || state.pairingKeyStateByte === 1) {
     log('Writing TX Level [0x01] (LOW_LEVEL) to 06aa3a61 for onboarding...', 'tx');
     try {
       await writeBleCharacteristic(BLE_UUIDS.CHAR_TX_LEVEL, new Uint8Array([0x01]));
       await sleep(200);
-    } catch (_) {}
+    } catch (e) {
+      log(`TX Level [0x01] note: ${e.message}`, 'warn');
+    }
   }
 
   const authBytes = hexToBytes(authKeyHex);
@@ -801,7 +811,9 @@ async function performAuthHandshake(forceOnboarding = false) {
     try {
       await writeBleCharacteristic(BLE_UUIDS.CHAR_TX_LEVEL, new Uint8Array([0x00]));
       await sleep(150);
-    } catch (_) {}
+    } catch (e) {
+      log(`TX Level [0x00] note: ${e.message}`, 'warn');
+    }
   }
 }
 
@@ -830,13 +842,17 @@ async function readInitialTelemetry() {
     for (const targetIdx of [0, 1, 2, 3, 4, 5]) {
       try {
         state.lastCupTargetIdx = targetIdx;
-        await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_TARGET, new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]));
+        const targetPayload = new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]);
+        log(`[06aa3a14] Select Dial ${targetIdx}: ${bytesToHex(targetPayload)}`, 'tx');
+        await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_TARGET, targetPayload);
         await sleep(120);
         const volBytes = await readBleCharacteristic(BLE_UUIDS.CHAR_CUP_VOLUME);
         if (volBytes && volBytes.length >= 2) {
           const vol = ((volBytes[0] & 0xFF) << 8) | (volBytes[1] & 0xFF);
           applyMachineCupTargetVolume(targetIdx, vol);
           log(`[06aa3a24 Dial ${targetIdx}] ${vol} ml (${bytesToHex(volBytes)})`, 'rx');
+        } else {
+          log(`[06aa3a24 Dial ${targetIdx}] Empty/short response (${volBytes ? volBytes.length : 0}B)`, 'warn');
         }
       } catch (err) {
         log(`Initial dial ${targetIdx} read failed: ${err.message}`, 'warn');
@@ -1039,7 +1055,10 @@ function applyMachineCupTargetVolume(targetIdx, volMl, persist = true) {
 }
 
 function handleRawCharacteristicBytes(uuid, bytes) {
-  if (!bytes || bytes.length === 0) return;
+  if (!bytes || bytes.length === 0) {
+    log(`[BLE RX ${uuid ? uuid.substring(4, 8) : '?'}] Empty payload`, 'warn');
+    return;
+  }
 
   if (uuid === BLE_UUIDS.CHAR_MACHINE_STATUS && bytes.length >= 2) {
     // Decode 48-bit MachineStatus bitfield (06aa3a12)
@@ -1130,7 +1149,7 @@ function handleRawCharacteristicBytes(uuid, bytes) {
       obstacleDetected: state.obstacleDetected
     });
     updateDescaleGuideUI();
-    log(`[06aa3a22 Slider] ${isOpen ? 'OPEN (0x00)' : 'CLOSED (0x02)'}`, 'rx');
+    log(`[06aa3a22 Slider] ${isOpen ? 'OPEN' : 'CLOSED'} (${bytesToHex(bytes)})`, 'rx');
 
   } else if (uuid === BLE_UUIDS.CHAR_AUTH_TYPE) {
     const code = bytes[0];
@@ -1211,6 +1230,8 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     state.lastErrorRecord = rec;
     if (el.valFaultRecord && rec) el.valFaultRecord.textContent = rec.summary;
     log(`[06aa3a23 ErrorInfo] ${rec ? rec.summary : '--'} (${bytesToHex(bytes)})`, 'rx');
+  } else {
+    log(`[BLE RX ${uuid ? uuid.substring(4, 8) : '?'}] Unhandled/short (${bytes.length}B): ${bytesToHex(bytes)}`, 'warn');
   }
 }
 
@@ -1241,15 +1262,15 @@ function decodeCommandResponse(bytes) {
     showToast(reason);
   };
 
-  if (respCode === 0x20 || (bytes[0] & 0xF0) === 0x80) {
-    log(`[06aa3a52 CommandResponse] ACK / DONE (${hex})`, 'rx');
-  } else if (respCode === 0x36) {
+  if (respCode === 0x36) {
     rejectCommand('Command rejected: Volume out of hardware range (0x36).');
   } else if (respCode === 0x24) {
     const reason = CONDITION_NOT_FULFILLED_REASONS[subCode] || `Condition not fulfilled (0x24, subcode 0x${subCode.toString(16)})`;
     rejectCommand(reason);
+  } else if (respCode === 0x20 || (bytes[0] & 0xF0) === 0x80) {
+    log(`[06aa3a52 CommandResponse] ACK / DONE (${hex})`, 'rx');
   } else {
-    log(`[06aa3a52 CommandResponse] ${hex}`, 'rx');
+    log(`[06aa3a52 CommandResponse] code=0x${respCode.toString(16)} sub=0x${subCode.toString(16)} (${hex})`, 'rx');
   }
 }
 
@@ -1544,6 +1565,7 @@ function beginSoakCountdown(waitSec, clampMaxSec = 300) {
 
   clearInterval(state.brewInterval);
   clearInterval(state.soakInterval);
+  log(`Soak timer active (${waitSec}s, clamp window ${clampMaxSec}s)`, 'info');
 
   el.soakControlBox.classList.remove('hidden');
   el.brewCupGraphic.textContent = '⏱️';
@@ -1610,8 +1632,8 @@ async function launchSplitTempStage2(wf, withSettleDelay = false) {
   const s2 = wf.stage2;
   state.activeWorkflow = null;
   try {
+    log(`Launching Stage 2 (${withSettleDelay ? 'READY transition' : 'fallback timer'}): ${s2.label}`, 'info');
     if (withSettleDelay) {
-      log(`Stage 1 finished (MachineState=READY). Launching Stage 2: ${s2.label}`, 'info');
       await sleep(350);
     }
     await sendSingleStageCustomBrew(s2.coffeeMl, s2.waterMl, s2.temp, 'coffee-first', s2.label);
@@ -1833,7 +1855,8 @@ async function writeDialCupSize() {
   const targetPayload = new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]);
   const volPayload = new Uint8Array([(volMl >> 8) & 0xFF, volMl & 0xFF, 0xFF, 0xFF]);
 
-  log(`Programming Dial Target ${targetIdx} -> ${volMl} ml: ${bytesToHex(volPayload)}`, 'tx');
+  log(`[06aa3a14] Select Dial ${targetIdx}: ${bytesToHex(targetPayload)}`, 'tx');
+  log(`[06aa3a24] Program Dial ${targetIdx} -> ${volMl} ml: ${bytesToHex(volPayload)}`, 'tx');
   try {
     await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_TARGET, targetPayload);
     await sleep(200);
@@ -2075,6 +2098,7 @@ function startBrewTracking(title, subtitle, durationSec) {
     const isMachineBusy = !!(MACHINE_STATES[state.machineState] && MACHINE_STATES[state.machineState].isBusy);
     const fallbackSec = wf ? state.brewDurationSec + 35 : state.brewDurationSec;
     if (!isMachineBusy && elapsedSec >= fallbackSec) {
+      log(`Brew fallback timer fired (workflow=${wf ? wf.type : 'single'}, elapsed=${elapsedSec.toFixed(1)}s, state=${state.machineState})`, 'warn');
       // Fallback if 06aa3a12 notifications did not fire for 2-stage split-temp:
       try {
         if (wf && wf.type === 'two-stage-split' && wf.stage === 1 && !wf.stage2Triggered) {
@@ -3201,11 +3225,16 @@ async function prepareDescaleViaBle() {
     // Clear any scheduled timer safely before starting maintenance (03 06 01 02)
     const stopPayload = new Uint8Array([0x03, 0x06, 0x01, 0x02]);
     log(`Pre-descale BLE prep: clearing timers (03 06 01 02)`, 'tx');
-    await writeBleCharacteristic(BLE_UUIDS.CHAR_COMMAND, stopPayload).catch(() => {});
+    await writeBleCharacteristic(BLE_UUIDS.CHAR_COMMAND, stopPayload).catch((e) => {
+      log(`Pre-descale stop note: ${e.message}`, 'warn');
+    });
     await sleep(150);
 
     for (const uuid of [BLE_UUIDS.CHAR_MACHINE_STATUS, BLE_UUIDS.CHAR_USER_SETTINGS]) {
-      const bytes = await readBleCharacteristic(uuid).catch(() => null);
+      const bytes = await readBleCharacteristic(uuid).catch((e) => {
+        log(`Pre-descale read ${uuid.substring(4, 8)} note: ${e.message}`, 'warn');
+        return null;
+      });
       if (bytes) handleRawCharacteristicBytes(uuid, bytes);
       await sleep(100);
     }
