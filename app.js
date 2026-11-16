@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.14.4';
+const APP_VERSION = '0.14.5';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -1955,11 +1955,15 @@ function parseCupVolumeMl(bytes) {
   return (bytes && bytes.length >= 2) ? (((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF)) : null;
 }
 
+let isDialBusy = false;
+
 async function readDialCupSize() {
   if (!state.isConnected) {
     showToast('Please connect to the machine first!');
     return;
   }
+  if (isDialBusy) return;
+  isDialBusy = true;
   const targetIdx = parseInt(el.selectCupTarget.value, 10);
   state.lastCupTargetIdx = targetIdx;
   const targetPayload = new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]);
@@ -1976,6 +1980,8 @@ async function readDialCupSize() {
   } catch (err) {
     log(`Cup size read error: ${err.message}`, 'err');
     showToast(`Error: ${err.message}`);
+  } finally {
+    isDialBusy = false;
   }
 }
 
@@ -1984,6 +1990,8 @@ async function writeDialCupSize() {
     showToast('Please connect to the machine first!');
     return;
   }
+  if (isDialBusy) return;
+  isDialBusy = true;
   const targetIdx = parseInt(el.selectCupTarget.value, 10);
   state.lastCupTargetIdx = targetIdx;
   const volMl = parseInt(el.inputCupVolume.value, 10);
@@ -2034,6 +2042,8 @@ async function writeDialCupSize() {
   } catch (err) {
     log(`Cup size write error: ${err.message}`, 'err');
     showToast(`Error: ${err.message}`);
+  } finally {
+    isDialBusy = false;
   }
 }
 
@@ -3043,6 +3053,22 @@ function syncDialProfileChipUI() {
 }
 
 function applyDialProfile(profileMap, activeBtn, toastText, persist = true) {
+  if (state.isConnected && el.selectCupTarget && el.inputCupVolume && el.valCupTargetMl) {
+    // While connected, preview only the active slot's slider without overwriting other machine-read slots
+    const selectedIdx = parseInt(el.selectCupTarget.value, 10);
+    const opt = el.selectCupTarget.options[el.selectCupTarget.selectedIndex];
+    const min = opt ? parseInt(opt.dataset.min, 10) : 15;
+    const max = opt ? parseInt(opt.dataset.max, 10) : 300;
+    const targetVol = typeof profileMap[selectedIdx] === 'number' ? Math.max(min, Math.min(max, profileMap[selectedIdx])) : min;
+    el.inputCupVolume.value = targetVol;
+    el.valCupTargetMl.textContent = `${targetVol} ml`;
+    if (toastText) {
+      log(`[DEBUG-cup] Quick profile UI-only (${toastText}); press "Save to Dial" to write BLE.`, 'info');
+      showToast(`Slider set to ${targetVol} ml for Dial ${selectedIdx} — press "Save to Dial"`);
+    }
+    return;
+  }
+
   for (let i = 0; i <= 5; i += 1) {
     if (typeof profileMap[i] === 'number') {
       applyMachineCupTargetVolume(i, profileMap[i], false);

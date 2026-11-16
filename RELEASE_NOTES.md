@@ -33,6 +33,9 @@ High-level user benefits across meaningful releases (newest first):
 
 > **Maintenance rule:** Every patch, minor, or major increment of `APP_VERSION` in `app.js` receives an entry below detailing commits, protocol/UI changes, and verification coverage.
 
+### `v0.14.5` — `2026-11-16`
+- **`app.js`, `tests/test_app.js`**: Fixed connected-mode `applyDialProfile()` overwriting all 6 `state.machineDialVolumes` slots with unsaved profile values (now previews only the active slot's slider until `Save to Dial` is pressed) and added an `isDialBusy` guard preventing `readDialCupSize()`/`writeDialCupSize()` races.
+
 ### `v0.14.4` — `2026-11-16`
 - **`app.js`, `index.html`, `styles.css`, `tests/test_app.js`**: Aborts `connectBle()` cleanly when GATT drops before Service `1910` finishes discovering (avoiding spurious `Characteristic 3a41 not available` toast), adds a `[DEBUG-ble]` `3a21`/`3a41` read/property probe when `already in progress` fails while `gattConnected=true`, and folds the red `Clear X Events` button to the right side of the log toolbar away from `Copy Logs`.
 

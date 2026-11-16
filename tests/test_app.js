@@ -1744,6 +1744,19 @@ test('Fix [v0.14.3]: auth runs before notifications, retries in-progress WinRT e
   assert.equal(el.logConsole.children.length, 0);
 });
 
+test('Fix [v0.14.5]: Quick calibration profiles do not overwrite machineDialVolumes while connected', async () => {
+  const h = createAppHarness();
+  const state = h.getState();
+  const el = h.getEl();
+  state.isConnected = true;
+  state.machineDialVolumes = { 0: 25, 1: 40, 2: 80, 3: 40, 4: 167, 5: 230 };
+  el.selectCupTarget.value = '4';
+  h.ctx.applyAppCalibrationProfile();
+  assert.equal(el.inputCupVolume.value, '140');
+  assert.equal(el.valCupTargetMl.textContent, '140 ml');
+  assert.equal(state.machineDialVolumes[4], 167);
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;
