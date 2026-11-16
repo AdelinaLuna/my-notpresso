@@ -610,7 +610,7 @@ test('Regression [#4 / d3d62dd]: syncCustomRecipeUI works and bloom edits update
   assert.equal(state.savedRecipes.find(r => r.id === bloomId).name, 'Updated Clean Macro');
 });
 
-test('Regression [#5 / 744387f]: Stage 2 triggers on (1->2) HEATING_UP->READY and respects +35s buffer', async () => {
+test('Regression [#5 / #19]: Stage 2 waits through HEATING_UP->READY until BREWING->READY and respects +35s buffer', async () => {
   const h = createAppHarness({ deferTimeouts: true });
   const state = h.getState();
   const txs = [];
@@ -624,8 +624,17 @@ test('Regression [#5 / 744387f]: Stage 2 triggers on (1->2) HEATING_UP->READY an
     stage2: { coffeeMl: 0, waterMl: 160, temp: 1, label: 'Stage 2/2: 160ml Water' }
   };
 
-  // Transition 1 (Heating Up) -> 2 (Ready)
+  // Real machine heat transition 1 (Heating Up) -> 2 (Ready) -> 4 (Brewing) must NOT trigger Stage 2 early
   await h.ctx.handleWorkflowStatusUpdate(1, 2, false);
+  assert.notEqual(state.activeWorkflow, null);
+  assert.equal(txs.length, 0, 'Must NOT trigger Stage 2 on HEATING_UP -> READY before brewing');
+
+  await h.ctx.handleWorkflowStatusUpdate(2, 4, false);
+  assert.equal(txs.length, 0);
+  assert.equal(state.activeWorkflow.sawBrewing, true);
+
+  // Only after BREWING (4) -> READY (2) finishes Stage 1 does Stage 2 fire
+  await h.ctx.handleWorkflowStatusUpdate(4, 2, false);
   assert.equal(state.activeWorkflow, null);
   assert.equal(txs.length, 2);
   assert.equal(txs[1], '03050704000000000107'); // stage 2 warm water

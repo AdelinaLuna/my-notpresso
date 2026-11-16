@@ -8,7 +8,7 @@ Version history for **Notpresso Expert (`EN 350.G`)**, tracking `APP_VERSION` in
 
 High-level user benefits across meaningful releases (newest first):
 
-- **`v0.13.8 – v0.13.11`** — Fixes **Rotary Dial cup size slot alignment** (`Americano Coffee/Water` & `Hot Water`), stops false `0xC0` BLE rejection alerts, and adds newline-preserving **Copy Logs**.
+- **`v0.13.8 – v0.13.12`** — Fixes **Great Americano XL** & multi-stage brews (waits for actual pouring before Stage 2), corrects **Rotary Dial slots** (`Americano` & `Hot Water`), eliminates false `0xC0` alerts, and adds **Copy Logs**.
 - **`v0.13.7`** — Long-pressing the header logo to force a cache refresh now takes **3 seconds instead of 5** (`LOGO_HOLD_REFRESH_SEC`).
 - **`v0.13.5 – v0.13.6`** — Your active rotary-dial profile (`My App Calibration` / `Factory Defaults`) and machine-synced cup sizes now stay consistent across Machine, Presets, and Custom views automatically—offline or connected.
 - **`v0.13.0 – v0.13.4`** — Pick separate temperatures (`Warm 80°C`, `Hot 85°C`, `Max 90°C`) per coffee/water stage, swap pour order safely with a one-tap Swap button, and see known cup tags like `(Lungo) 80 ml` right beside sliders.
@@ -31,6 +31,10 @@ High-level user benefits across meaningful releases (newest first):
 ## 2. Detailed Technical Changelog (Per-Version)
 
 > **Maintenance rule:** Every patch, minor, or major increment of `APP_VERSION` in `app.js` receives an entry below detailing commits, protocol/UI changes, and verification coverage.
+
+### `v0.13.12` — `2026-11-16`
+- **`app.js`**: Updated `handleWorkflowStatusUpdate()` and `executeCurrentSystemRinseStep()` to track `wf.sawBrewing` (`newState === 4`) and advance only on `BREWING -> READY` rather than firing prematurely on `HEATING_UP (1) -> READY (2)` (Fixes `#19`).
+- **`tests/test_app.js`**: Updated `Regression [#5 / #19]` to confirm `1 -> 2` holds Stage 2 until `4 -> 2` completes (Fixes `#27`).
 
 ### `v0.13.11` — `2026-11-16`
 - **`app.js`**: Restricted `decodeCommandResponse()` rejection matching to explicit `respCode === 0x24` so status packets with `0xC0` header bits (e.g. `C0 00 01 22`) no longer abort tracking (Fixes `#21`).

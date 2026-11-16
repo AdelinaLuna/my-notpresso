@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.11';
+const APP_VERSION = '0.13.12';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -1510,6 +1510,10 @@ async function resumePhase2Extraction() {
 
 async function handleWorkflowStatusUpdate(prevState, newState, waterTankEmpty) {
   const wf = state.activeWorkflow;
+  if (wf && newState === 4) {
+    wf.sawBrewing = true;
+  }
+  const finishedBrewing = (prevState === 4 || !!(wf && wf.sawBrewing)) && newState === 2;
 
   // 1. If In-Chamber Water-Pause Soak detects Water Tank Empty (06aa3a12 bit 7), auto-start the soak countdown!
   if (wf && wf.type === 'water-pause-soak' && !wf.soakStarted && waterTankEmpty) {
@@ -1519,9 +1523,9 @@ async function handleWorkflowStatusUpdate(prevState, newState, waterTankEmpty) {
     return;
   }
 
-  // 2. If 2-Stage Split-Temp finished Stage 1 (transitioned from BREWING/HEAT_UP back to READY=2):
+  // 2. If 2-Stage Split-Temp finished Stage 1 (transitioned from BREWING back to READY=2):
   if (wf && wf.type === 'two-stage-split' && wf.stage === 1 && !wf.stage2Triggered) {
-    if ((prevState === 4 || prevState === 1) && newState === 2) {
+    if (finishedBrewing) {
       wf.stage = 2;
       wf.stage2Triggered = true;
       const s2 = wf.stage2;
@@ -1533,18 +1537,18 @@ async function handleWorkflowStatusUpdate(prevState, newState, waterTankEmpty) {
     }
   }
 
-  // 3. If 2-Stage Bloom/Clean Macro finished Stage 1 (transitioned from BREWING/HEAT_UP to READY=2):
+  // 3. If 2-Stage Bloom/Clean Macro finished Stage 1 (transitioned from BREWING back to READY=2):
   if (wf && wf.type === 'two-stage-bloom' && wf.stage === 1 && !wf.soakStarted) {
-    if ((prevState === 4 || prevState === 1) && newState === 2) {
+    if (finishedBrewing) {
       log(`Phase 1 complete. Starting ${wf.waitSec}s soak/bloom countdown...`, 'info');
       beginSoakCountdown(wf.waitSec, 300);
       return;
     }
   }
 
-  // 4. If 5-Shot System Rinse finished current step (transitioned from BREWING/HEAT_UP back to READY=2):
+  // 4. If 5-Shot System Rinse finished current step (transitioned from BREWING back to READY=2):
   if (wf && wf.type === 'system-rinse' && !wf.advancing) {
-    if ((prevState === 4 || prevState === 1) && newState === 2) {
+    if (finishedBrewing) {
       await advanceOrFinishSystemRinse(wf);
       return;
     }
@@ -1653,6 +1657,7 @@ async function executeCurrentSystemRinseStep() {
   const s = SYSTEM_RINSE_STEPS[wf.stepIndex];
   if (!s) return;
   wf.advancing = false;
+  wf.sawBrewing = false;
   updateSystemRinseUI(`Step ${s.step} / ${wf.totalSteps}`, `Running ${s.label}...`, true);
   const payload = buildProgrammedBrewPayload(s.sizeCode, s.tempCode, 0);
   log(`System Rinse [${s.step}/${wf.totalSteps}] ${s.label}: ${bytesToHex(payload)}`, 'tx');
