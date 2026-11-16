@@ -1751,10 +1751,15 @@ test('Fix [v0.14.5]: Quick calibration profiles do not overwrite machineDialVolu
   state.isConnected = true;
   state.machineDialVolumes = { 0: 25, 1: 40, 2: 80, 3: 40, 4: 167, 5: 230 };
   el.selectCupTarget.value = '4';
+  h.ctx.updateCupRangeHint();
+  assert.equal(el.btnProfileFactoryDefaults.textContent, '🏭 Factory Default: 125 ml');
+  assert.equal(el.btnProfileAppCalibration.textContent, '📱 App Calibration: 140 ml');
+  assert.equal(el.btnProfileAppCalibration.classList.contains('active-chip'), false);
   h.ctx.applyAppCalibrationProfile();
   assert.equal(el.inputCupVolume.value, '140');
   assert.equal(el.valCupTargetMl.textContent, '140 ml');
   assert.equal(state.machineDialVolumes[4], 167);
+  assert.equal(el.btnProfileAppCalibration.classList.contains('active-chip'), true);
 });
 
 // Execute all tests sequentially

@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.14.5';
+const APP_VERSION = '0.14.6';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -1305,7 +1305,7 @@ function handleRawCharacteristicBytes(uuid, bytes) {
 
   } else if (uuid === BLE_UUIDS.CHAR_CUP_VOLUME && bytes.length >= 2) {
     const vol = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
-    if (vol >= 10 && vol <= 500) {
+    if (!isWritingDial && vol >= 10 && vol <= 500) {
       const targetIdx = state.lastCupTargetIdx !== null && state.lastCupTargetIdx !== undefined
         ? state.lastCupTargetIdx
         : parseInt(el.selectCupTarget.value, 10);
@@ -1956,6 +1956,7 @@ function parseCupVolumeMl(bytes) {
 }
 
 let isDialBusy = false;
+let isWritingDial = false;
 
 async function readDialCupSize() {
   if (!state.isConnected) {
@@ -1964,6 +1965,7 @@ async function readDialCupSize() {
   }
   if (isDialBusy) return;
   isDialBusy = true;
+  isWritingDial = true;
   const targetIdx = parseInt(el.selectCupTarget.value, 10);
   state.lastCupTargetIdx = targetIdx;
   const targetPayload = new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]);
@@ -1992,6 +1994,7 @@ async function writeDialCupSize() {
   }
   if (isDialBusy) return;
   isDialBusy = true;
+  isWritingDial = true;
   const targetIdx = parseInt(el.selectCupTarget.value, 10);
   state.lastCupTargetIdx = targetIdx;
   const volMl = parseInt(el.inputCupVolume.value, 10);
@@ -2043,6 +2046,7 @@ async function writeDialCupSize() {
     log(`Cup size write error: ${err.message}`, 'err');
     showToast(`Error: ${err.message}`);
   } finally {
+    isWritingDial = false;
     isDialBusy = false;
   }
 }
@@ -2449,6 +2453,7 @@ function updateCupRangeHint() {
   el.inputCupVolume.value = clamped;
   el.valCupTargetMl.textContent = `${clamped} ml`;
   el.hintCupRange.textContent = `Hardware allowed range: ${min} ml – ${max} ml (Default: ${def} ml)`;
+  syncDialProfileChipUI();
 }
 
 // 14. Saved Library & Favorites UI
@@ -3042,13 +3047,25 @@ function dialMatchesProfile(dialMap, profileMap) {
   return true;
 }
 
-function syncDialProfileChipUI() {
+function syncDialProfileChipUI(overrideVal = null) {
   const dial = state.machineDialVolumes;
-  if (el.btnProfileFactoryDefaults) {
-    el.btnProfileFactoryDefaults.classList.toggle('active-chip', dialMatchesProfile(dial, DIAL_PROFILE_FACTORY));
+  const selectedIdx = el.selectCupTarget ? parseInt(el.selectCupTarget.value, 10) : 1;
+  const slotIdx = Number.isInteger(selectedIdx) ? selectedIdx : 1;
+  const factoryVal = DIAL_PROFILE_FACTORY[slotIdx];
+  const appVal = DIAL_PROFILE_APP[slotIdx];
+  if (el.btnProfileFactoryDefaults && typeof factoryVal === 'number') {
+    el.btnProfileFactoryDefaults.textContent = `🏭 Factory Default: ${factoryVal} ml`;
+    const isMatch = overrideVal !== null
+      ? overrideVal === factoryVal
+      : (state.isConnected ? Boolean(dial && dial[slotIdx] === factoryVal) : dialMatchesProfile(dial, DIAL_PROFILE_FACTORY));
+    el.btnProfileFactoryDefaults.classList.toggle('active-chip', isMatch);
   }
-  if (el.btnProfileAppCalibration) {
-    el.btnProfileAppCalibration.classList.toggle('active-chip', dialMatchesProfile(dial, DIAL_PROFILE_APP));
+  if (el.btnProfileAppCalibration && typeof appVal === 'number') {
+    el.btnProfileAppCalibration.textContent = `📱 App Calibration: ${appVal} ml`;
+    const isMatch = overrideVal !== null
+      ? overrideVal === appVal
+      : (state.isConnected ? Boolean(dial && dial[slotIdx] === appVal) : dialMatchesProfile(dial, DIAL_PROFILE_APP));
+    el.btnProfileAppCalibration.classList.toggle('active-chip', isMatch);
   }
 }
 
@@ -3062,6 +3079,7 @@ function applyDialProfile(profileMap, activeBtn, toastText, persist = true) {
     const targetVol = typeof profileMap[selectedIdx] === 'number' ? Math.max(min, Math.min(max, profileMap[selectedIdx])) : min;
     el.inputCupVolume.value = targetVol;
     el.valCupTargetMl.textContent = `${targetVol} ml`;
+    syncDialProfileChipUI(targetVol);
     if (toastText) {
       log(`[DEBUG-cup] Quick profile UI-only (${toastText}); press "Save to Dial" to write BLE.`, 'info');
       showToast(`Slider set to ${targetVol} ml for Dial ${selectedIdx} — press "Save to Dial"`);
@@ -4052,7 +4070,9 @@ function initListeners() {
   // Tab 5: Machine & Dial Config
   el.selectCupTarget.addEventListener('change', updateCupRangeHint);
   el.inputCupVolume.addEventListener('input', () => {
-    el.valCupTargetMl.textContent = `${el.inputCupVolume.value} ml`;
+    const val = parseInt(el.inputCupVolume.value, 10);
+    el.valCupTargetMl.textContent = `${val} ml`;
+    syncDialProfileChipUI(val);
   });
   el.btnReadCupSize.addEventListener('click', readDialCupSize);
   el.btnWriteCupSize.addEventListener('click', writeDialCupSize);
@@ -4235,6 +4255,9 @@ async function forceAppCacheUpdate() {
     if (typeof caches !== 'undefined' && typeof caches.keys === 'function') {
       const keys = await caches.keys();
       await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    if (typeof fetch === 'function') {
+      await Promise.all(['./', './index.html', './app.js', './styles.css', './manifest.json'].map(u => fetch(u, { cache: 'reload' }).catch(() => {})));
     }
   } catch (_) {}
   const basePath = (window.location && window.location.pathname) ? window.location.pathname : './';

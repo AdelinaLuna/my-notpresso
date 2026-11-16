@@ -33,6 +33,9 @@ High-level user benefits across meaningful releases (newest first):
 
 > **Maintenance rule:** Every patch, minor, or major increment of `APP_VERSION` in `app.js` receives an entry below detailing commits, protocol/UI changes, and verification coverage.
 
+### `v0.14.6` — `2026-11-16`
+- **`app.js`, `index.html`, `sw.js`, `tests/test_app.js`**: Shows per-dial profile chip values (`Factory Default: X ml` / `App Calibration: Y ml`) for the currently selected slot instead of all 6 slots at once, highlights whichever profile matches the slider or machine value, prevents mid-write `06aa3a24` notifications from jumping the slider (`isWritingDial`), and forces `{ cache: 'reload' }` during 3s logo-hold refresh and `sw.js` install to bypass GitHub Pages' 10-minute HTTP cache.
+
 ### `v0.14.5` — `2026-11-16`
 - **`app.js`, `tests/test_app.js`**: Fixed connected-mode `applyDialProfile()` overwriting all 6 `state.machineDialVolumes` slots with unsaved profile values (now previews only the active slot's slider until `Save to Dial` is pressed) and added an `isDialBusy` guard preventing `readDialCupSize()`/`writeDialCupSize()` races.
 
