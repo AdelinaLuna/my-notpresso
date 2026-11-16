@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.16';
+const APP_VERSION = '0.13.17';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -1294,10 +1294,18 @@ function buildProgrammedBrewPayload(coffeeTypeId, tempCode, delaySeconds = 0) {
   ]);
 }
 
+const TEMP_MODES = {
+  1: { label: 'Warm ~80°C', short: '80°C' },
+  0: { label: 'Hot ~85°C',  short: '85°C' },
+  2: { label: 'Max ~90°C',  short: '90°C' }
+};
+
 function getTempLabel(tempCode) {
-  if (tempCode === 2) return 'Max ~90°C';
-  if (tempCode === 1) return 'Warm ~80°C';
-  return 'Hot ~85°C';
+  return (TEMP_MODES[tempCode] || TEMP_MODES[0]).label;
+}
+
+function getShortTempLabel(tempCode) {
+  return (TEMP_MODES[tempCode] || TEMP_MODES[0]).short;
 }
 
 async function brewPreset(drinkName, sizeCode, tempCode) {
@@ -3245,10 +3253,6 @@ function isTwoStagePreset(def) {
   return Boolean(def && def.coffeeMl > 0 && def.waterMl > 0);
 }
 
-function getShortTempLabel(code) {
-  return code === 1 ? '80°C' : (code === 2 ? '90°C' : '85°C');
-}
-
 function executePresetDrink(drinkKey, useTweaks = false) {
   const def = PRESET_DRINK_DEFAULTS[drinkKey];
   if (!def) return;
@@ -3394,11 +3398,9 @@ function syncPresetCardUI(card, drinkKey) {
 
 function renderStageTempButtonsHtml(btnClass, selectedTemp) {
   const classes = btnClass === 'preset-temp-btn' ? 'preset-temp-btn' : `preset-temp-btn ${btnClass}`;
-  return [
-    { mode: 1, label: 'Warm ~80°C' },
-    { mode: 0, label: 'Hot ~85°C' },
-    { mode: 2, label: 'Max ~90°C' }
-  ].map(t => `<button type="button" class="${classes}${selectedTemp === t.mode ? ' active' : ''}" data-temp="${t.mode}">${t.label}</button>`).join('');
+  return [1, 0, 2].map(mode => (
+    `<button type="button" class="${classes}${selectedTemp === mode ? ' active' : ''}" data-temp="${mode}">${TEMP_MODES[mode].label}</button>`
+  )).join('');
 }
 
 function initPresetDrinkCards() {
