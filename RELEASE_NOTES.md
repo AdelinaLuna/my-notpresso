@@ -8,7 +8,7 @@ Version history for **Notpresso Expert (`EN 350.G`)**, tracking `APP_VERSION` in
 
 High-level user benefits across meaningful releases (newest first):
 
-- **`v0.13.8`** — Preserves newlines when copying BLE Packet Inspector logs and adds a one-tap **Copy Logs** button.
+- **`v0.13.8 – v0.13.9`** — Preserves newlines when copying BLE Packet Inspector logs, adds a one-tap **Copy Logs** button, and caps log entries at 500 lines.
 - **`v0.13.7`** — Long-pressing the header logo to force a cache refresh now takes **3 seconds instead of 5** (`LOGO_HOLD_REFRESH_SEC`).
 - **`v0.13.5 – v0.13.6`** — Your active rotary-dial profile (`My App Calibration` / `Factory Defaults`) and machine-synced cup sizes now stay consistent across Machine, Presets, and Custom views automatically—offline or connected.
 - **`v0.13.0 – v0.13.4`** — Pick separate temperatures (`Warm 80°C`, `Hot 85°C`, `Max 90°C`) per coffee/water stage, swap pour order safely with a one-tap Swap button, and see known cup tags like `(Lungo) 80 ml` right beside sliders.
@@ -31,6 +31,10 @@ High-level user benefits across meaningful releases (newest first):
 ## 2. Detailed Technical Changelog (Per-Version)
 
 > **Maintenance rule:** Every patch, minor, or major increment of `APP_VERSION` in `app.js` receives an entry below detailing commits, protocol/UI changes, and verification coverage.
+
+### `v0.13.9` — `2026-11-16`
+- **`app.js`**: Added `MAX_LOG_ENTRIES = 500` cap inside `log()`, pruning oldest `#logConsole` child nodes and syncing `#logCounter` (Fixes `#29`).
+- **`tests/test_app.js`**: Added `Fix [#29]` verifying oldest-entry trimming beyond `MAX_LOG_ENTRIES`.
 
 ### `v0.13.8` — `2026-11-16`
 - **`index.html`, `styles.css`, `app.js`**: Switched `.log-console` from flex-column to block layout so multi-line selection preserves `\n` line breaks; added `#btnCopyLogs` and `copyLogsToClipboard()` via `navigator.clipboard.writeText()` (Fixes `#24`).

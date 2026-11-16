@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.8';
+const APP_VERSION = '0.13.9';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -381,6 +381,7 @@ const el = {
 };
 
 // 4. Logging & Toast Utilities
+const MAX_LOG_ENTRIES = 500;
 let logCount = 1;
 function log(msg, type = 'info') {
   const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
@@ -388,8 +389,11 @@ function log(msg, type = 'info') {
   div.className = `log-entry ${type}`;
   div.textContent = `[${time}] ${msg}`;
   el.logConsole.appendChild(div);
+  while (el.logConsole.children.length > MAX_LOG_ENTRIES && el.logConsole.firstElementChild) {
+    el.logConsole.removeChild(el.logConsole.firstElementChild);
+  }
   el.logConsole.scrollTop = el.logConsole.scrollHeight;
-  logCount++;
+  logCount = el.logConsole.children.length;
   el.logCounter.textContent = `${logCount} events`;
   console.log(`[Notpresso:${type.toUpperCase()}] ${msg}`);
 }

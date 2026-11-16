@@ -1331,6 +1331,18 @@ test('Fix [#24]: Copy Logs exports newline-delimited #logConsole entries only', 
   assert.match(lines[lines.length - 1], /Line two$/);
 });
 
+test('Fix [#29]: #logConsole trims oldest entries beyond MAX_LOG_ENTRIES', () => {
+  const h = createAppHarness();
+  const el = h.getEl();
+  const maxEntries = h.eval('MAX_LOG_ENTRIES');
+  for (let i = 1; i <= maxEntries + 25; i += 1) {
+    h.ctx.log(`msg-${i}`, 'info');
+  }
+  assert.equal(el.logConsole.children.length, maxEntries);
+  assert.match(el.logConsole.firstElementChild.textContent, /msg-26$/);
+  assert.match(el.logConsole.children[maxEntries - 1].textContent, new RegExp(`msg-${maxEntries + 25}$`));
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;
