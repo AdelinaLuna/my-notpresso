@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.15';
+const APP_VERSION = '0.13.16';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -223,11 +223,6 @@ const el = {
   customStageWater: document.getElementById('customStageWater'),
   badgeCustomCoffeeOrder: document.getElementById('badgeCustomCoffeeOrder'),
   badgeCustomWaterOrder: document.getElementById('badgeCustomWaterOrder'),
-  seqButtonsCustom: document.querySelectorAll('.seq-btn-custom'),
-  chkSplitTemp: document.getElementById('chkSplitTemp'),
-  singleTempGroup: document.getElementById('singleTempGroup'),
-  splitTempGroup: document.getElementById('splitTempGroup'),
-  tempButtonsCustom: document.querySelectorAll('#singleTempGroup .temp-btn-custom'),
   tempButtonsCoffee: document.querySelectorAll('.temp-btn-coffee'),
   tempButtonsWater: document.querySelectorAll('.temp-btn-water'),
   sliderCoffeeMl: document.getElementById('sliderCoffeeMl'),
@@ -2601,11 +2596,6 @@ function syncCustomRecipeUI() {
     el.badgeCustomWaterOrder,
     state.customSequence
   );
-  if (el.seqButtonsCustom) el.seqButtonsCustom.forEach(b => b.classList.toggle('active', b.dataset.seq === state.customSequence));
-  if (el.chkSplitTemp) el.chkSplitTemp.checked = state.customSplitTemp;
-  if (el.singleTempGroup) el.singleTempGroup.classList.toggle('hidden', state.customSplitTemp);
-  if (el.splitTempGroup) el.splitTempGroup.classList.toggle('hidden', !state.customSplitTemp);
-  if (el.tempButtonsCustom) el.tempButtonsCustom.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customTemp));
   if (el.tempButtonsCoffee) el.tempButtonsCoffee.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customCoffeeTemp));
   if (el.tempButtonsWater) el.tempButtonsWater.forEach(b => b.classList.toggle('active', parseInt(b.dataset.temp, 10) === state.customWaterTemp));
   updateCustomRecipeSummary();
@@ -3633,25 +3623,6 @@ function initListeners() {
     state.customSplitTemp = true;
     setCustomStageOrder('water-first');
     showToast('Loaded Great Americano XL (160ml @ Warm → 40ml @ Max)');
-  });
-
-  el.seqButtonsCustom.forEach(btn => {
-    btn.addEventListener('click', () => setCustomStageOrder(btn.dataset.seq));
-  });
-
-  el.chkSplitTemp.addEventListener('change', () => {
-    state.customSplitTemp = el.chkSplitTemp.checked;
-    el.singleTempGroup.classList.toggle('hidden', state.customSplitTemp);
-    el.splitTempGroup.classList.toggle('hidden', !state.customSplitTemp);
-    updateCustomRecipeSummary();
-  });
-
-  el.tempButtonsCustom.forEach(btn => {
-    btn.addEventListener('click', () => {
-      el.tempButtonsCustom.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.customTemp = parseInt(btn.dataset.temp, 10);
-    });
   });
 
   el.tempButtonsCoffee.forEach(btn => {

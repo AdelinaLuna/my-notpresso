@@ -8,7 +8,7 @@ Version history for **Notpresso Expert (`EN 350.G`)**, tracking `APP_VERSION` in
 
 High-level user benefits across meaningful releases (newest first):
 
-- **`v0.13.8 – v0.13.15`** — Fixes **Great Americano XL** & multi-stage brew handoffs, aligns **Rotary Dial slots** (`Americano Coffee/Water` & `Hot Water`) with connect-time dial logging, removes false `0xC0` alerts & duplicate disconnect logs, and adds newline-preserving **Copy Logs**.
+- **`v0.13.8 – v0.13.16`** — Fixes **Great Americano XL** & multi-stage brew handoffs, aligns **Rotary Dial slots** (`Americano Coffee/Water` & `Hot Water`) with connect-time dial logging, removes false `0xC0` alerts, duplicate disconnect logs, and legacy hidden controls, and adds newline-preserving **Copy Logs**.
 - **`v0.13.7`** — Long-pressing the header logo to force a cache refresh now takes **3 seconds instead of 5** (`LOGO_HOLD_REFRESH_SEC`).
 - **`v0.13.5 – v0.13.6`** — Your active rotary-dial profile (`My App Calibration` / `Factory Defaults`) and machine-synced cup sizes now stay consistent across Machine, Presets, and Custom views automatically—offline or connected.
 - **`v0.13.0 – v0.13.4`** — Pick separate temperatures (`Warm 80°C`, `Hot 85°C`, `Max 90°C`) per coffee/water stage, swap pour order safely with a one-tap Swap button, and see known cup tags like `(Lungo) 80 ml` right beside sliders.
@@ -31,6 +31,9 @@ High-level user benefits across meaningful releases (newest first):
 ## 2. Detailed Technical Changelog (Per-Version)
 
 > **Maintenance rule:** Every patch, minor, or major increment of `APP_VERSION` in `app.js` receives an entry below detailing commits, protocol/UI changes, and verification coverage.
+
+### `v0.13.16` — `2026-11-16`
+- **`index.html`, `app.js`, `tests/test_app.js`**: Removed dead hidden legacy Custom compatibility DOM elements (`.seq-btn-custom`, `#chkSplitTemp`, `#singleTempGroup`, `#splitTempGroup`) and their unused DOM refs, sync writes, and listeners (Fixes `#28`).
 
 ### `v0.13.15` — `2026-11-16`
 - **`app.js`**: Logged initial `06aa3a24` dial slot read values and non-fatal `warn` diagnostics in `readInitialTelemetry()` instead of silently swallowing GATT read errors (Fixes `#26`).

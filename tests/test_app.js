@@ -320,13 +320,6 @@ function createAppHarness(options = {}) {
       return card;
     }
   ));
-  rootGroups.set('.seq-btn-custom', [
-    createMockElement('button', { class: 'seq-btn-custom active', 'data-seq': 'coffee-first' }),
-    createMockElement('button', { class: 'seq-btn-custom', 'data-seq': 'water-first' })
-  ]);
-  rootGroups.set('#singleTempGroup .temp-btn-custom', ['1', '0', '2'].map(
-    t => createMockElement('button', { class: 'temp-btn-custom', 'data-temp': t })
-  ));
   rootGroups.set('.temp-btn-coffee', ['1', '0', '2'].map(
     t => createMockElement('button', { class: 'temp-btn-coffee', 'data-temp': t })
   ));
@@ -592,9 +585,9 @@ test('Regression [#4 / d3d62dd]: syncCustomRecipeUI works and bloom edits update
   const customId = state.savedRecipes[customIdx].id;
   h.ctx.editRecipeInCustomTab(customIdx);
   assert.equal(state.editingRecipeId, customId);
-  assert.equal(el.chkSplitTemp.checked, true);
-  assert.equal(el.singleTempGroup.classList.contains('hidden'), true);
-  assert.equal(el.splitTempGroup.classList.contains('hidden'), false);
+  assert.equal(state.customSplitTemp, true);
+  assert.equal(el.tempButtonsCoffee.find(b => b.classList.contains('active')).dataset.temp, '2');
+  assert.equal(el.tempButtonsWater.find(b => b.classList.contains('active')).dataset.temp, '1');
   assert.equal(el.btnUpdateCustom.classList.contains('hidden'), false);
 
   // Bloom recipe edit + save updates existing entry in place
