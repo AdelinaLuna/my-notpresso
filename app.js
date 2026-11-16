@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.12';
+const APP_VERSION = '0.13.13';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -1032,7 +1032,12 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     log(`[06aa3a12 Status] ${bytesToHex(bytes)} -> ${statusLabel}`, 'rx');
 
     // Handle active multi-stage workflows on state transitions!
-    handleWorkflowStatusUpdate(prevState, stateCode, waterTankEmpty);
+    Promise.resolve(handleWorkflowStatusUpdate(prevState, stateCode, waterTankEmpty)).catch((err) => {
+      state.activeWorkflow = null;
+      finishBrewTracking({ immediate: true });
+      log(`Workflow update error: ${err.message}`, 'err');
+      showToast(`Workflow error: ${err.message}`);
+    });
 
   } else if (uuid === BLE_UUIDS.CHAR_SLIDER) {
     const isOpen = bytes[0] === 0x00;
@@ -1508,6 +1513,24 @@ async function resumePhase2Extraction() {
   }
 }
 
+async function launchSplitTempStage2(wf, withSettleDelay = false) {
+  wf.stage = 2;
+  wf.stage2Triggered = true;
+  const s2 = wf.stage2;
+  state.activeWorkflow = null;
+  try {
+    if (withSettleDelay) {
+      log(`Stage 1 finished (MachineState=READY). Launching Stage 2: ${s2.label}`, 'info');
+      await sleep(350);
+    }
+    await sendSingleStageCustomBrew(s2.coffeeMl, s2.waterMl, s2.temp, 'coffee-first', s2.label);
+  } catch (err) {
+    finishBrewTracking({ immediate: true });
+    log(`Split-temp Stage 2 error: ${err.message}`, 'err');
+    showToast(`Stage 2 error: ${err.message}`);
+  }
+}
+
 async function handleWorkflowStatusUpdate(prevState, newState, waterTankEmpty) {
   const wf = state.activeWorkflow;
   if (wf && newState === 4) {
@@ -1526,13 +1549,7 @@ async function handleWorkflowStatusUpdate(prevState, newState, waterTankEmpty) {
   // 2. If 2-Stage Split-Temp finished Stage 1 (transitioned from BREWING back to READY=2):
   if (wf && wf.type === 'two-stage-split' && wf.stage === 1 && !wf.stage2Triggered) {
     if (finishedBrewing) {
-      wf.stage = 2;
-      wf.stage2Triggered = true;
-      const s2 = wf.stage2;
-      log(`Stage 1 finished (MachineState=READY). Launching Stage 2: ${s2.label}`, 'info');
-      state.activeWorkflow = null;
-      await sleep(350);
-      await sendSingleStageCustomBrew(s2.coffeeMl, s2.waterMl, s2.temp, 'coffee-first', s2.label);
+      await launchSplitTempStage2(wf, true);
       return;
     }
   }
@@ -1968,24 +1985,27 @@ function startBrewTracking(title, subtitle, durationSec) {
     const fallbackSec = wf ? state.brewDurationSec + 35 : state.brewDurationSec;
     if (!isMachineBusy && elapsedSec >= fallbackSec) {
       // Fallback if 06aa3a12 notifications did not fire for 2-stage split-temp:
-      if (wf && wf.type === 'two-stage-split' && wf.stage === 1 && !wf.stage2Triggered) {
-        wf.stage = 2;
-        wf.stage2Triggered = true;
-        const s2 = wf.stage2;
+      try {
+        if (wf && wf.type === 'two-stage-split' && wf.stage === 1 && !wf.stage2Triggered) {
+          await launchSplitTempStage2(wf, false);
+          return;
+        }
+        if (wf && wf.type === 'two-stage-bloom' && wf.stage === 1 && !wf.soakStarted) {
+          beginSoakCountdown(wf.waitSec, 300);
+          return;
+        }
+        if (wf && wf.type === 'system-rinse' && !wf.advancing) {
+          await advanceOrFinishSystemRinse(wf);
+          return;
+        }
+        if (!wf || !wf.soakStarted) {
+          finishBrewTracking();
+        }
+      } catch (err) {
         state.activeWorkflow = null;
-        await sendSingleStageCustomBrew(s2.coffeeMl, s2.waterMl, s2.temp, 'coffee-first', s2.label);
-        return;
-      }
-      if (wf && wf.type === 'two-stage-bloom' && wf.stage === 1 && !wf.soakStarted) {
-        beginSoakCountdown(wf.waitSec, 300);
-        return;
-      }
-      if (wf && wf.type === 'system-rinse' && !wf.advancing) {
-        await advanceOrFinishSystemRinse(wf);
-        return;
-      }
-      if (!wf || !wf.soakStarted) {
-        finishBrewTracking();
+        finishBrewTracking({ immediate: true });
+        log(`Workflow fallback error: ${err.message}`, 'err');
+        showToast(`Workflow error: ${err.message}`);
       }
     }
   }, 250);

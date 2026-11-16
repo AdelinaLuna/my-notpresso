@@ -1369,6 +1369,25 @@ test('Fix [#21]: Non-0x24 CommandResponse frames with 0xC0 header bits do not tr
   assert.equal(el.ledTelematicsBanner.classList.contains('led-state-err'), false);
 });
 
+test('Fix [#22]: Split-temp Stage 2 GATT rejection clears workflow cleanly instead of throwing', async () => {
+  const h = createAppHarness({ deferTimeouts: true });
+  const state = h.getState();
+  const el = h.getEl();
+  h.ctx.writeBleCharacteristic = async () => { throw new Error('GATT write failed'); };
+  state.activeWorkflow = {
+    type: 'two-stage-split',
+    stage: 1,
+    sawBrewing: true,
+    stage2Triggered: false,
+    stage2: { coffeeMl: 40, waterMl: 0, temp: 2, label: 'Stage 2/2: 40ml Coffee' }
+  };
+
+  await h.ctx.handleWorkflowStatusUpdate(4, 2, false);
+  assert.equal(state.activeWorkflow, null);
+  assert.equal(state.isBrewing, false);
+  assert.match(el.toast.textContent, /Stage 2 error: GATT write failed/);
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;
