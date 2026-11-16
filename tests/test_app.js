@@ -1533,6 +1533,217 @@ test('Fix [v0.14.1]: BLE debug logging covers masked rejections, short/unknown R
   assert.equal(logs.some(l => l.includes('Launching Stage 2 (fallback timer): Stage 2/2: 40ml Coffee')), true);
 });
 
+test('Fix [v0.14.2]: Live telematics, optional 3a24 notify, and dial write readback verification logs', async () => {
+  const fetchBodies = [];
+  const h = createAppHarness({ deferTimeouts: true });
+  h.ctx.window = { location: { hostname: 'localhost' } };
+  h.ctx.fetch = async (_url, opts) => { fetchBodies.push(JSON.parse(opts.body).line); };
+  h.ctx.sleep = async () => {};
+
+  const state = h.getState();
+  const el = h.getEl();
+  const uuids = h.eval('BLE_UUIDS');
+
+  // 1. 06aa3a12 status logs lid, tank, bin, stock, sched, pair, obs, boot, evt + [Telematics] once per title change
+  h.ctx.handleRawCharacteristicBytes(uuids.CHAR_MACHINE_STATUS, new Uint8Array([0xC5, 0x42, 0x1A, 0x35, 0x40, 0x00]));
+  h.ctx.handleRawCharacteristicBytes(uuids.CHAR_MACHINE_STATUS, new Uint8Array([0xC5, 0x42, 0x1A, 0x35, 0x40, 0x00]));
+  h.ctx.handleRawCharacteristicBytes(uuids.CHAR_MACHINE_STATUS, new Uint8Array([0x00, 0x02, 0x00, 0x00, 0x00, 0x00]));
+  h.ctx.handleRawCharacteristicBytes(uuids.CHAR_SLIDER, new Uint8Array([0x00]));
+
+  // 2. writeDialCupSize performs +250ms & re-select +1.4s readback, detects mismatch, and syncs machine value
+  state.isConnected = true;
+  el.selectCupTarget.value = '4';
+  el.inputCupVolume.value = '140';
+  let readCalls = 0;
+  let lastTarget = null;
+  const cupTargetChar = { properties: { read: true }, async writeValueWithResponse() {} };
+  const cupVolChar = { properties: { notify: true }, async writeValueWithResponse() {} };
+  state.characteristics.set(uuids.CHAR_CUP_TARGET, cupTargetChar);
+  state.characteristics.set(uuids.CHAR_CUP_VOLUME, cupVolChar);
+  h.ctx.writeBleCharacteristic = async (uuid, bytes) => {
+    if (uuid === uuids.CHAR_CUP_TARGET) lastTarget = bytes;
+  };
+  h.ctx.readBleCharacteristic = async (uuid) => {
+    if (uuid === uuids.CHAR_CUP_TARGET) return lastTarget;
+    if (uuid === uuids.CHAR_CUP_VOLUME) {
+      readCalls++;
+      return new Uint8Array([0x00, 0x28, 0x00, 0x00]); // machine still returns 40 ml instead of 140 ml
+    }
+    return null;
+  };
+  await h.ctx.writeDialCupSize();
+  assert.equal(readCalls, 2);
+  assert.equal(state.machineDialVolumes[4], 40);
+
+  // 3. Optional 3a24 notify subscribes when properties.notify === true
+  let notifySubscribed = false;
+  const mockNotifyVolChar = {
+    properties: { notify: true },
+    async startNotifications() { notifySubscribed = true; },
+    addEventListener() {},
+    removeEventListener() {}
+  };
+  const mockServer = {
+    async getPrimaryService() {
+      return {
+        async getCharacteristic(uuid) {
+          if (uuid === uuids.CHAR_CUP_VOLUME) return mockNotifyVolChar;
+          return {
+            async startNotifications() {},
+            addEventListener() {},
+            removeEventListener() {}
+          };
+        }
+      };
+    }
+  };
+  await h.ctx.discoverAllCharacteristics(mockServer);
+  assert.equal(notifySubscribed, true);
+
+  h.ctx.applyAppCalibrationProfile();
+
+  const logs = Array.from(el.logConsole.children).map(n => n.textContent);
+  assert.equal(logs.some(l => l.includes('[06aa3a12 Status]') && l.includes('lid=OPEN') && l.includes('tank=EMPTY') && l.includes('boot=1') && l.includes('evt=1/1/1')), true);
+  assert.equal(logs.filter(l => l.includes('[Telematics]')).length, 2);
+  assert.equal(logs.some(l => l.includes('[06aa3a22 Slider] OPEN (00) | lid=OPEN')), true);
+  assert.equal(logs.some(l => l.includes('[DEBUG-cup] Re-select+Readback +1.4s: Dial 4 -> 40 ml (00 28 00 00) vs req=140 ml (MISMATCH)')), true);
+  assert.equal(logs.some(l => l.includes('[DEBUG-cup] Quick profile UI-only')), true);
+  assert.equal(fetchBodies.length > 0, true);
+});
+
+test('Fix [v0.14.3]: auth runs before notifications, retries in-progress WinRT errors, guards scanning, and cleans up failed GATT', async () => {
+  const events = [];
+  let connected = false;
+  let gattAttempts = 0;
+  let authReadAttempts = 0;
+  let authWriteAttempts = 0;
+  let failFatal = false;
+  const charListeners = new Map();
+
+  function makeChar(uuid) {
+    return {
+      async readValue() {
+        if (uuid === h.eval('BLE_UUIDS.CHAR_AUTH_TYPE')) {
+          authReadAttempts++;
+          if (authReadAttempts === 1) throw new Error('Connection already in progress.');
+          events.push('auth-read');
+          return { buffer: new Uint8Array([0x02]).buffer };
+        }
+        if (uuid === h.eval('BLE_UUIDS.CHAR_CUP_VOLUME')) return { buffer: new Uint8Array([0x00, 0x28]).buffer };
+        return { buffer: new Uint8Array([0x00]).buffer };
+      },
+      async writeValueWithResponse() {
+        if (uuid === h.eval('BLE_UUIDS.CHAR_AUTH')) {
+          authWriteAttempts++;
+          if (failFatal) {
+            const e = new Error('Connection already in progress.');
+            e.name = 'NetworkError';
+            throw e;
+          }
+          if (authWriteAttempts === 1) throw new Error('Connection already in progress.');
+          events.push('auth-write');
+        }
+      },
+      async startNotifications() {
+        events.push(`notify:${uuid.substring(4, 8)}`);
+      },
+      addEventListener(type, fn) { if (type === 'characteristicvaluechanged') charListeners.set(uuid, fn); },
+      removeEventListener(type) { if (type === 'characteristicvaluechanged') charListeners.delete(uuid); }
+    };
+  }
+
+  let requestCount = 0;
+  const deviceListeners = new Set();
+  const mockDevice = {
+    name: 'Expert-WinRT',
+    addEventListener(type, fn) { if (type === 'gattserverdisconnected') deviceListeners.add(fn); },
+    removeEventListener(type, fn) { if (type === 'gattserverdisconnected') deviceListeners.delete(fn); },
+    gatt: {
+      get connected() { return connected; },
+      async connect() {
+        gattAttempts++;
+        if (gattAttempts === 1) throw new Error('Connection already in progress.');
+        connected = true;
+        return { async getPrimaryService() { return { async getCharacteristic(uuid) { return makeChar(uuid); } }; } };
+      },
+      disconnect() {
+        connected = false;
+        events.push('gatt-disconnect');
+      }
+    }
+  };
+
+  let resolveScan;
+  const h = createAppHarness({
+    navigator: {
+      bluetooth: {
+        requestDevice() {
+          requestCount++;
+          if (requestCount === 1) return new Promise((r) => { resolveScan = r; });
+          return Promise.resolve(mockDevice);
+        }
+      }
+    }
+  });
+  h.ctx.sleep = async () => {};
+  const state = h.getState();
+  const el = h.getEl();
+
+  // 1. Overlapping click while isScanning must be ignored
+  const firstConnect = h.ctx.connectBle();
+  await h.ctx.connectBle();
+  assert.equal(requestCount, 1);
+  resolveScan(mockDevice);
+  await firstConnect;
+
+  assert.equal(state.isConnected, true);
+  assert.equal(gattAttempts, 2);
+  assert.equal(authReadAttempts, 3); // 1 fail + 1 auth retry + 1 readInitialTelemetry read
+  assert.equal(authWriteAttempts, 2);
+  assert.ok(events.indexOf('auth-read') < events.indexOf('notify:3a12'));
+  assert.ok(events.indexOf('auth-write') < events.indexOf('notify:3a12'));
+
+  // 2. Fatal failure on subsequent attempt must probe 3a21, disconnect half-open GATT, and clean state
+  await h.ctx.disconnectBle();
+  failFatal = true;
+  await h.ctx.connectBle();
+  assert.equal(state.isConnected, false);
+  assert.equal(state.isScanning, false);
+  assert.equal(connected, false);
+  assert.equal(deviceListeners.size, 0);
+  assert.equal(charListeners.size, 0);
+  assert.equal(events.includes('gatt-disconnect'), true);
+  let logs = Array.from(el.logConsole.children).map(n => n.textContent);
+  assert.equal(logs.some(l => l.includes('[DEBUG-ble] Auth fail probe:')), true);
+  assert.equal(logs.some(l => l.includes('Connection error: NetworkError: Connection already in progress. (gattConnected=true)')), true);
+
+  // 3. Early GATT drop during Service 1910 discovery must abort cleanly instead of reporting missing 3a41
+  failFatal = false;
+  let dropDuringDiscover = true;
+  const dropServer = {
+    async getPrimaryService() {
+      connected = false;
+      throw new Error('GATT Server is disconnected');
+    }
+  };
+  const origConnect = mockDevice.gatt.connect;
+  mockDevice.gatt.connect = async () => {
+    if (dropDuringDiscover) { connected = true; return dropServer; }
+    return origConnect();
+  };
+  await h.ctx.connectBle();
+  dropDuringDiscover = false;
+  logs = Array.from(el.logConsole.children).map(n => n.textContent);
+  assert.equal(logs.some(l => l.includes('Connection error: GATT disconnected before Service 1910 auth was ready (gattConnected=false)')), true);
+  assert.equal(logs.some(l => l.includes('Characteristic 3a41 not available')), false);
+
+  // 4. Clear Logs red button tracks live event count and resets to Clear 0 Events
+  assert.equal(el.btnClearLogs.textContent, `Clear ${el.logConsole.children.length} Events`);
+  await el.btnClearLogs.dispatchEvent('click');
+  assert.equal(el.btnClearLogs.textContent, 'Clear 0 Events');
+  assert.equal(el.logConsole.children.length, 0);
+});
+
 // Execute all tests sequentially
 let passed = 0;
 let failed = 0;

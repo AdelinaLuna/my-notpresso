@@ -7,6 +7,7 @@ so your phone (e.g. Samsung Galaxy S24 Ultra) can access Web Bluetooth on your l
 """
 
 import http.server
+import json
 import socket
 import ssl
 import sys
@@ -14,6 +15,7 @@ import os
 import urllib.parse
 
 PORT = 8443
+DEBUG_LOG_FILE = os.environ.get("NOTPRESSO_LOG_FILE", "")
 
 def get_local_ip():
     try:
@@ -38,7 +40,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
+    def log_message(self, format, *args):
+        if args and isinstance(args[0], str) and "/__debug_log" in args[0]:
+            return
+        super().log_message(format, *args)
+
+    def do_POST(self):
+        if urllib.parse.urlsplit(self.path).path != "/__debug_log":
+            self.send_error(404, "Not Found")
+            return
+        length = min(max(int(self.headers.get("Content-Length", "0") or 0), 0), 8192)
+        raw = self.rfile.read(length) if length > 0 else b""
+        text = raw.decode("utf-8", errors="replace").strip()
+        try:
+            payload = json.loads(text) if text else {}
+            line = str(payload.get("line", text)) if isinstance(payload, dict) else text
+        except Exception:
+            line = text
+        clean = line.replace("\r", " ").replace("\n", " ").strip()
+        if clean:
+            entry = f"[LIVE-BLE] {clean}"
+            print(entry, flush=True)
+            log_path = os.environ.get("NOTPRESSO_LOG_FILE", "") or DEBUG_LOG_FILE
+            if log_path:
+                with open(log_path, "a", encoding="utf-8") as fp:
+                    fp.write(entry + "\n")
+        self.send_response(204)
+        self.end_headers()
+
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(line_buffering=True)
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     local_ip = get_local_ip()
 

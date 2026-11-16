@@ -33,10 +33,16 @@ import extract_auth_key as eak  # noqa: E402
 class FakeHTTPHandler(server.Handler):
     """Minimal subclass of server.Handler without opening a socket."""
 
-    def __init__(self, req_path: str):
+    def __init__(self, req_path: str, body: bytes = b""):
         self.path = req_path
         self.errors = []
+        self.responses = []
         self.headers_sent = []
+        self.headers = {"Content-Length": str(len(body))}
+        self.rfile = io.BytesIO(body)
+
+    def send_response(self, code, msg=None):
+        self.responses.append(code)
 
     def send_error(self, code, msg=None):
         self.errors.append((code, msg))
@@ -69,6 +75,26 @@ class TestServerSecurityRegression(unittest.TestCase):
         header_map = dict(h.headers_sent)
         self.assertEqual(header_map.get("Cache-Control"), "no-cache")
         self.assertNotIn("Access-Control-Allow-Origin", header_map)
+
+    def test_debug_log_endpoint_records_and_rejects_other_posts(self):
+        import tempfile
+
+        bad = FakeHTTPHandler("/other", b'{"line":"x"}')
+        bad.do_POST()
+        self.assertEqual(bad.errors, [(404, "Not Found")])
+
+        with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as tf:
+            log_path = Path(tf.name)
+        try:
+            with patch.dict(os.environ, {"NOTPRESSO_LOG_FILE": str(log_path)}):
+                ok = FakeHTTPHandler("/__debug_log", b'{"line":"RX [06aa3a12 Status] lid=OPEN"}')
+                with patch("builtins.print") as mock_print:
+                    ok.do_POST()
+                mock_print.assert_called_once()
+            self.assertEqual(ok.responses, [204])
+            self.assertIn("[LIVE-BLE] RX [06aa3a12 Status] lid=OPEN", log_path.read_text(encoding="utf-8"))
+        finally:
+            log_path.unlink(missing_ok=True)
 
 
 class TestExtractAuthKey(unittest.TestCase):

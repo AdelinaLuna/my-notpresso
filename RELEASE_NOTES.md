@@ -8,7 +8,7 @@ Version history for **Notpresso Expert (`EN 350.G`)**, tracking `APP_VERSION` in
 
 High-level user benefits across meaningful releases (newest first):
 
-- **`v0.14.0 – v0.14.1`** — Redesigns **Capsule Stock & Alerts** with a live gauge, status badges (`Tracking Off` / `Low Alert` / `LED ON`), sleeve quick-steppers (`-10 / +10 / +50`), live UI/input sync on every read or brew, and full BLE debug log coverage across fallback timers, auth/descale errors, and short/raw packets.
+- **`v0.14.0 – v0.14.4`** — Adds Edge/WinRT GATT connection stabilization (Service 1 auth before notifications, in-progress retry, early-drop guard, auth fail probe, and half-open cleanup), live lid/sensor telematics logging, post-write cup-size readback diagnostics & `06aa3a24` notifications, local live-debugging log streaming on `server.py`, plus the redesigned **Capsule Stock & Alerts** UI (`#stockPanel`).
 - **`v0.13.8 – v0.13.17`** — Fixes **Great Americano XL** & multi-stage brew handoffs, aligns **Rotary Dial slots** (`Americano Coffee/Water` & `Hot Water`) with connect-time dial logging, removes false `0xC0` alerts, duplicate disconnect logs, and legacy hidden controls, deduplicates temperature helpers, and adds newline-preserving **Copy Logs**.
 - **`v0.13.7`** — Long-pressing the header logo to force a cache refresh now takes **3 seconds instead of 5** (`LOGO_HOLD_REFRESH_SEC`).
 - **`v0.13.5 – v0.13.6`** — Your active rotary-dial profile (`My App Calibration` / `Factory Defaults`) and machine-synced cup sizes now stay consistent across Machine, Presets, and Custom views automatically—offline or connected.
@@ -32,6 +32,17 @@ High-level user benefits across meaningful releases (newest first):
 ## 2. Detailed Technical Changelog (Per-Version)
 
 > **Maintenance rule:** Every patch, minor, or major increment of `APP_VERSION` in `app.js` receives an entry below detailing commits, protocol/UI changes, and verification coverage.
+
+### `v0.14.4` — `2026-11-16`
+- **`app.js`, `index.html`, `styles.css`, `tests/test_app.js`**: Aborts `connectBle()` cleanly when GATT drops before Service `1910` finishes discovering (avoiding spurious `Characteristic 3a41 not available` toast), adds a `[DEBUG-ble]` `3a21`/`3a41` read/property probe when `already in progress` fails while `gattConnected=true`, and folds the red `Clear X Events` button to the right side of the log toolbar away from `Copy Logs`.
+
+### `v0.14.3` — `2026-11-16`
+- **`app.js`**: Fixed MS Edge / WinRT `"Connection already in progress."` handshake failures by guarding `connectBle()` against re-entrant clicks (`state.isScanning`), authenticating Service 1 (`SERVICE_AUTH`) before discovering remaining services or subscribing notification CCCDs, serializing `startNotifications()` through `enqueueGattOp`, retrying transient `already in progress` errors in `runBleWithRetry()`, and cleanly disconnecting half-open GATT handles on failure via `clearCharacteristicListeners()`.
+- **`tests/test_app.js`**: Added `Fix [v0.14.3]` verifying auth-before-notifications order, transient retry recovery, scan re-entrancy guard, and failed-GATT cleanup.
+
+### `v0.14.2` — `2026-11-16`
+- **`app.js`, `server.py`**: Added decoded lid & live telematics fields (`lid`, `tank`, `bin`, `stock`, `sched`, `pair`, `obs`, `boot`, `evt`) to `06aa3a12` / `06aa3a22` logs, `[Telematics]` state-transition logging, optional `06aa3a24` notify subscription, `[DEBUG-cup]` post-write `+250ms` & `+1.4s` re-select readback verification in `writeDialCupSize()`, and `POST /__debug_log` live log mirroring from localhost to `server.py` stdout.
+- **`tests/test_app.js`, `tests/test_python.py`**: Added `Fix [v0.14.2]` and `test_debug_log_endpoint_records_and_rejects_other_posts` verifying telematics logs, readback mismatch detection, `06aa3a24` notifications, and `/__debug_log`.
 
 ### `v0.14.1` — `2026-11-16`
 - **`app.js`**: Closed BLE debug log blind spots: logged skipped/missing characteristics & notify subscriptions in `discoverAllCharacteristics()`, `06aa3a51`/`06aa3a61` errors in `performAuthHandshake()`, `06aa3a14` TX target bytes in `readInitialTelemetry()` and `writeDialCupSize()`, `bytesToHex(bytes)` for `06aa3a22` slider notifications, unhandled/short/empty packets in `handleRawCharacteristicBytes()`, workflow fallback timer triggers (`startBrewTracking()`, `launchSplitTempStage2()`, `beginSoakCountdown()`), and `prepareDescaleViaBle()` errors; moved explicit `0x36`/`0x24` checks before `0x80` ACK nibble check in `decodeCommandResponse()` so rejections are never masked.

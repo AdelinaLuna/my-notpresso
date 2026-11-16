@@ -1097,9 +1097,14 @@ body {
   cursor: pointer;
 }
 
-.log-counter {
-  font-size: 11px;
-  color: var(--text-dim);
+.btn-sm-danger {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+  color: #fff;
+}
+
+.btn-sm-danger:active {
+  background: #E02B20;
 }
 
 .log-console {

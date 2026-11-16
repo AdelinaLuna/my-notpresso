@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.14.1';
+const APP_VERSION = '0.14.4';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -172,6 +172,7 @@ const state = {
   lastErrorRecord: null,
   machineDialVolumes: { 0: 25, 1: 40, 2: 110, 3: 25, 4: 125, 5: 200 },
   lastCupTargetIdx: null,
+  lastTelematicsTitle: null,
   serialNumber: '--',
   firmwareVersion: '--',
 
@@ -374,7 +375,6 @@ const el = {
   btnCopyLogs: document.getElementById('btnCopyLogs'),
   btnClearLogs: document.getElementById('btnClearLogs'),
   logConsole: document.getElementById('logConsole'),
-  logCounter: document.getElementById('logCounter'),
 
   toast: document.getElementById('toast')
 };
@@ -393,8 +393,11 @@ function log(msg, type = 'info') {
   }
   el.logConsole.scrollTop = el.logConsole.scrollHeight;
   logCount = el.logConsole.children.length;
-  el.logCounter.textContent = `${logCount} events`;
+  if (el.btnClearLogs) el.btnClearLogs.textContent = `Clear ${logCount} Events`;
   console.log(`[Notpresso:${type.toUpperCase()}] ${msg}`);
+  if (typeof window !== 'undefined' && window.location && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname) && typeof fetch === 'function') {
+    fetch('/__debug_log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: `${type.toUpperCase()} ${div.textContent}` }) }).catch(() => {});
+  }
 }
 
 async function copyLogsToClipboard() {
@@ -621,8 +624,22 @@ function enqueueGattOp(fn) {
   return next;
 }
 
+async function runBleWithRetry(op, label, maxAttempts = 4) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await op();
+    } catch (err) {
+      const msg = (err && err.message) || '';
+      if (!/already in progress/i.test(msg) || attempt === maxAttempts) throw err;
+      const waitMs = 250 * attempt;
+      log(`[DEBUG-ble] Retry ${attempt}/${maxAttempts - 1} (${label}) in ${waitMs}ms after: ${msg}`, 'warn');
+      await sleep(waitMs);
+    }
+  }
+}
+
 async function writeBleCharacteristic(uuid, uint8Bytes) {
-  return enqueueGattOp(async () => {
+  return enqueueGattOp(() => runBleWithRetry(async () => {
     const ch = state.characteristics.get(uuid);
     if (!ch) throw new Error(`Characteristic ${uuid.substring(4, 8)} not available`);
     if (ch.writeValueWithResponse) {
@@ -630,16 +647,49 @@ async function writeBleCharacteristic(uuid, uint8Bytes) {
     } else {
       await ch.writeValue(uint8Bytes);
     }
-  });
+  }, `TX ${uuid.substring(4, 8)}`));
 }
 
 async function readBleCharacteristic(uuid) {
-  return enqueueGattOp(async () => {
+  return enqueueGattOp(() => runBleWithRetry(async () => {
     const ch = state.characteristics.get(uuid);
     if (!ch) throw new Error(`Characteristic ${uuid.substring(4, 8)} not available`);
     const val = await ch.readValue();
     return new Uint8Array(val.buffer);
+  }, `RX ${uuid.substring(4, 8)}`));
+}
+
+const BLE_SERVICE_GROUPS = [
+  {
+    serviceUuid: BLE_UUIDS.SERVICE_AUTH,
+    chars: [BLE_UUIDS.CHAR_MACHINE_INFO, BLE_UUIDS.CHAR_SERIAL, BLE_UUIDS.CHAR_AUTH, BLE_UUIDS.CHAR_AUTH_TYPE, BLE_UUIDS.CHAR_TX_LEVEL]
+  },
+  {
+    serviceUuid: BLE_UUIDS.SERVICE_BREW,
+    chars: [BLE_UUIDS.CHAR_MACHINE_STATUS, BLE_UUIDS.CHAR_SLIDER, BLE_UUIDS.CHAR_SCHEDULE, BLE_UUIDS.CHAR_COMMAND, BLE_UUIDS.CHAR_CMD_RESPONSE]
+  },
+  {
+    serviceUuid: BLE_UUIDS.SERVICE_ERROR,
+    chars: [BLE_UUIDS.CHAR_ERROR_SELECT, BLE_UUIDS.CHAR_ERROR_INFO]
+  },
+  {
+    serviceUuid: BLE_UUIDS.SERVICE_CUP_SIZE,
+    chars: [BLE_UUIDS.CHAR_CUP_TARGET, BLE_UUIDS.CHAR_CUP_VOLUME, BLE_UUIDS.CHAR_USER_SETTINGS]
+  },
+  {
+    serviceUuid: BLE_UUIDS.SERVICE_STOCK,
+    chars: [BLE_UUIDS.CHAR_STOCK, BLE_UUIDS.CHAR_STOCK_THRESHOLD]
+  }
+];
+
+function clearCharacteristicListeners() {
+  state.characteristics.forEach((ch, uuid) => {
+    const handler = notifyHandlers.get(uuid);
+    if (handler && typeof ch.removeEventListener === 'function') {
+      ch.removeEventListener('characteristicvaluechanged', handler);
+    }
   });
+  state.characteristics.clear();
 }
 
 async function connectBle() {
@@ -647,6 +697,7 @@ async function connectBle() {
     await disconnectBle();
     return;
   }
+  if (state.isScanning) return;
 
   if (!navigator.bluetooth) {
     alert('Web Bluetooth API is not available in this browser. Please use Chrome on Android/Desktop.');
@@ -674,8 +725,13 @@ async function connectBle() {
       ]
     });
 
-    if (state.device && typeof state.device.removeEventListener === 'function') {
-      state.device.removeEventListener('gattserverdisconnected', onDisconnected);
+    if (state.device && state.device !== device) {
+      if (typeof state.device.removeEventListener === 'function') {
+        state.device.removeEventListener('gattserverdisconnected', onDisconnected);
+      }
+      if (state.device.gatt && state.device.gatt.connected) {
+        try { state.device.gatt.disconnect(); } catch (_) {}
+      }
     }
     state.device = device;
     if (typeof device.removeEventListener === 'function') {
@@ -684,11 +740,21 @@ async function connectBle() {
     device.addEventListener('gattserverdisconnected', onDisconnected);
 
     log(`Selected "${device.name || 'Nespresso Expert'}". Connecting GATT...`, 'info');
-    const server = await device.gatt.connect();
+    const server = await runBleWithRetry(() => device.gatt.connect(), 'gatt.connect');
     state.server = server;
+    clearCharacteristicListeners();
 
-    await discoverAllCharacteristics(server);
+    // Authenticate Service 1 before discovering other services or writing CCCD notifications (Edge/WinRT + SDK order)
+    await discoverServiceGroup(server, BLE_SERVICE_GROUPS[0]);
+    if (device.gatt.connected === false || !state.characteristics.has(BLE_UUIDS.CHAR_AUTH)) {
+      throw new Error('GATT disconnected before Service 1910 auth was ready');
+    }
     await performAuthHandshake(false);
+
+    for (const grp of BLE_SERVICE_GROUPS.slice(1)) {
+      await discoverServiceGroup(server, grp);
+    }
+    await subscribeAllNotifications();
 
     state.isConnected = true;
     state.isScanning = false;
@@ -698,54 +764,78 @@ async function connectBle() {
     // Read initial diagnostics before releasing connect flow
     await readInitialTelemetry();
   } catch (err) {
+    const gattConnected = Boolean(state.device && state.device.gatt && state.device.gatt.connected);
+    const errMsg = (err && err.message) || String(err);
+    const errLabel = err && err.name && err.name !== 'Error' ? `${err.name}: ${errMsg}` : errMsg;
+
+    if (/already in progress/i.test(errMsg) && gattConnected) {
+      const chAuth = state.characteristics.get(BLE_UUIDS.CHAR_AUTH);
+      const authProps = (chAuth && chAuth.properties) || {};
+      const chInfo = state.characteristics.get(BLE_UUIDS.CHAR_MACHINE_INFO);
+      let probeNote = '3a21 missing';
+      if (chInfo && typeof chInfo.readValue === 'function') {
+        try {
+          const val = await chInfo.readValue();
+          probeNote = `3a21 OK (${val && val.buffer ? val.buffer.byteLength : 0}B)`;
+        } catch (probeErr) {
+          probeNote = `3a21 failed: ${(probeErr && probeErr.message) || probeErr}`;
+        }
+      }
+      log(`[DEBUG-ble] Auth fail probe: 3a41(write=${Boolean(authProps.write)}, wnr=${Boolean(authProps.writeWithoutResponse)}), ${probeNote}`, 'warn');
+    }
+
+    clearCharacteristicListeners();
+    if (state.device) {
+      if (typeof state.device.removeEventListener === 'function') {
+        state.device.removeEventListener('gattserverdisconnected', onDisconnected);
+      }
+      if (gattConnected && state.device.gatt && typeof state.device.gatt.disconnect === 'function') {
+        try { state.device.gatt.disconnect(); } catch (_) {}
+      }
+    }
+    state.server = null;
+    state.isConnected = false;
     state.isScanning = false;
     updateConnectionUI();
-    log(`Connection error: ${err.message}`, 'err');
-    showToast(`Connection failed: ${err.message}`);
+    log(`Connection error: ${errLabel} (gattConnected=${gattConnected})`, 'err');
+    if (/already in progress/i.test(errMsg)) {
+      log('WinRT/Edge BLE hint: toggle Windows Bluetooth off/on or test in Chrome (Android Phone URL also logs here).', 'warn');
+    }
+    showToast(`Connection failed: ${errMsg}`);
   }
 }
 
-async function discoverAllCharacteristics(server) {
-  state.characteristics.clear();
-  const serviceMap = [
-    {
-      serviceUuid: BLE_UUIDS.SERVICE_AUTH,
-      chars: [BLE_UUIDS.CHAR_MACHINE_INFO, BLE_UUIDS.CHAR_SERIAL, BLE_UUIDS.CHAR_AUTH, BLE_UUIDS.CHAR_AUTH_TYPE, BLE_UUIDS.CHAR_TX_LEVEL]
-    },
-    {
-      serviceUuid: BLE_UUIDS.SERVICE_BREW,
-      chars: [BLE_UUIDS.CHAR_MACHINE_STATUS, BLE_UUIDS.CHAR_SLIDER, BLE_UUIDS.CHAR_SCHEDULE, BLE_UUIDS.CHAR_COMMAND, BLE_UUIDS.CHAR_CMD_RESPONSE]
-    },
-    {
-      serviceUuid: BLE_UUIDS.SERVICE_ERROR,
-      chars: [BLE_UUIDS.CHAR_ERROR_SELECT, BLE_UUIDS.CHAR_ERROR_INFO]
-    },
-    {
-      serviceUuid: BLE_UUIDS.SERVICE_CUP_SIZE,
-      chars: [BLE_UUIDS.CHAR_CUP_TARGET, BLE_UUIDS.CHAR_CUP_VOLUME, BLE_UUIDS.CHAR_USER_SETTINGS]
-    },
-    {
-      serviceUuid: BLE_UUIDS.SERVICE_STOCK,
-      chars: [BLE_UUIDS.CHAR_STOCK, BLE_UUIDS.CHAR_STOCK_THRESHOLD]
-    }
-  ];
-
-  for (const grp of serviceMap) {
-    try {
-      const svc = await server.getPrimaryService(grp.serviceUuid);
-      for (const cUuid of grp.chars) {
-        try {
-          const ch = await svc.getCharacteristic(cUuid);
-          state.characteristics.set(cUuid, ch);
-        } catch (e) {
-          log(`Char ${cUuid.substring(4, 8)} note: ${e.message}`, 'warn');
-        }
-      }
-    } catch (e) {
-      log(`Service ${grp.serviceUuid.substring(4, 8)} note: ${e.message}`, 'warn');
-    }
+async function subscribeCharacteristicNotify(uuid, ch) {
+  await enqueueGattOp(() => runBleWithRetry(() => ch.startNotifications(), `Notify ${uuid.substring(4, 8)}`));
+  let handler = notifyHandlers.get(uuid);
+  if (!handler) {
+    handler = (ev) => handleRawCharacteristicBytes(uuid, new Uint8Array(ev.target.value.buffer));
+    notifyHandlers.set(uuid, handler);
   }
+  if (typeof ch.removeEventListener === 'function') {
+    ch.removeEventListener('characteristicvaluechanged', handler);
+  }
+  ch.addEventListener('characteristicvaluechanged', handler);
+  log(`Subscribed to notifications on ${uuid.substring(4, 8)}`, 'info');
+}
 
+async function discoverServiceGroup(server, grp) {
+  try {
+    const svc = await server.getPrimaryService(grp.serviceUuid);
+    for (const cUuid of grp.chars) {
+      try {
+        const ch = await svc.getCharacteristic(cUuid);
+        state.characteristics.set(cUuid, ch);
+      } catch (e) {
+        log(`Char ${cUuid.substring(4, 8)} note: ${e.message}`, 'warn');
+      }
+    }
+  } catch (e) {
+    log(`Service ${grp.serviceUuid.substring(4, 8)} note: ${e.message}`, 'warn');
+  }
+}
+
+async function subscribeAllNotifications() {
   // Subscribe to live notifications on MachineStatus (3a12), Slider (3a22), CommandResponse (3a52)
   for (const notifyUuid of [BLE_UUIDS.CHAR_MACHINE_STATUS, BLE_UUIDS.CHAR_SLIDER, BLE_UUIDS.CHAR_CMD_RESPONSE]) {
     const ch = state.characteristics.get(notifyUuid);
@@ -754,20 +844,30 @@ async function discoverAllCharacteristics(server) {
       continue;
     }
     try {
-      await ch.startNotifications();
-      let handler = notifyHandlers.get(notifyUuid);
-      if (!handler) {
-        handler = (ev) => handleRawCharacteristicBytes(notifyUuid, new Uint8Array(ev.target.value.buffer));
-        notifyHandlers.set(notifyUuid, handler);
-      }
-      if (typeof ch.removeEventListener === 'function') {
-        ch.removeEventListener('characteristicvaluechanged', handler);
-      }
-      ch.addEventListener('characteristicvaluechanged', handler);
-      log(`Subscribed to notifications on ${notifyUuid.substring(4, 8)}`, 'info');
+      await subscribeCharacteristicNotify(notifyUuid, ch);
     } catch (e) {
       log(`Notify ${notifyUuid.substring(4, 8)} note: ${e.message}`, 'warn');
     }
+  }
+
+  // Subscribe to CupVolume (06aa3a24, prop=0x1a) only when characteristic supports notify
+  const cupVolChar = state.characteristics.get(BLE_UUIDS.CHAR_CUP_VOLUME);
+  if (cupVolChar && cupVolChar.properties && cupVolChar.properties.notify) {
+    try {
+      await subscribeCharacteristicNotify(BLE_UUIDS.CHAR_CUP_VOLUME, cupVolChar);
+    } catch (e) {
+      log(`Notify 3a24 note: ${e.message}`, 'warn');
+    }
+  }
+}
+
+async function discoverAllCharacteristics(server, { subscribe = true } = {}) {
+  clearCharacteristicListeners();
+  for (const grp of BLE_SERVICE_GROUPS) {
+    await discoverServiceGroup(server, grp);
+  }
+  if (subscribe) {
+    await subscribeAllNotifications();
   }
 }
 
@@ -1062,6 +1162,7 @@ function handleRawCharacteristicBytes(uuid, bytes) {
 
   if (uuid === BLE_UUIDS.CHAR_MACHINE_STATUS && bytes.length >= 2) {
     // Decode 48-bit MachineStatus bitfield (06aa3a12)
+    const bootloaderActive = getBitBoolean(bytes, 0);
     const pairingState = selectBit(bytes, 1, 2);
     const errorPresent = getBitBoolean(bytes, 3);
     const descalingNeeded = getBitBoolean(bytes, 5);
@@ -1078,9 +1179,10 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     state.errorPresent = errorPresent;
     state.capsuleStockLow = capsuleStockLow;
 
+    let schedActive = false;
     if (bytes.length >= 4) {
       const stockCount = selectBit(bytes, 17, 26);
-      const schedActive = getBitBoolean(bytes, 27);
+      schedActive = getBitBoolean(bytes, 27);
       updateCapsuleStockDisplay(stockCount < 1023 ? stockCount : null, false);
       if (!schedActive) {
         el.badgeScheduleStatus.textContent = 'Idle';
@@ -1124,7 +1226,20 @@ function handleRawCharacteristicBytes(uuid, bytes) {
     });
     syncDescaleStepFromTelemetry(prevState, stateCode, waterTankEmpty, descalingNeeded);
 
-    log(`[06aa3a12 Status] ${bytesToHex(bytes)} -> ${statusLabel}`, 'rx');
+    const telematicsFields = [
+      `lid=${state.sliderOpen ? 'OPEN' : 'CLOSED'}`,
+      `tank=${waterTankEmpty ? 'EMPTY' : 'OK'}`,
+      `bin=${capsuleContainerFull ? 'FULL' : 'OK'}`,
+      `stock=${state.capsuleStock === null ? 'OFF' : state.capsuleStock}${capsuleStockLow ? '!' : ''}`,
+      `sched=${schedActive ? 1 : 0}`,
+      `pair=${pairingState}`,
+      `obs=${state.obstacleDetected ? 1 : 0}`,
+      `boot=${bootloaderActive ? 1 : 0}`
+    ];
+    if (bytes.length >= 5) {
+      telematicsFields.push(`evt=${selectBit(bytes, 28, 29)}/${selectBit(bytes, 30, 31)}/${selectBit(bytes, 32, 33)}`);
+    }
+    log(`[06aa3a12 Status] ${bytesToHex(bytes)} -> ${statusLabel} | ${telematicsFields.join(', ')}`, 'rx');
 
     // Handle active multi-stage workflows on state transitions!
     Promise.resolve(handleWorkflowStatusUpdate(prevState, stateCode, waterTankEmpty)).catch((err) => {
@@ -1149,7 +1264,8 @@ function handleRawCharacteristicBytes(uuid, bytes) {
       obstacleDetected: state.obstacleDetected
     });
     updateDescaleGuideUI();
-    log(`[06aa3a22 Slider] ${isOpen ? 'OPEN' : 'CLOSED'} (${bytesToHex(bytes)})`, 'rx');
+    const stateLabel = (MACHINE_STATES[state.machineState] || {}).label || `State ${state.machineState}`;
+    log(`[06aa3a22 Slider] ${isOpen ? 'OPEN' : 'CLOSED'} (${bytesToHex(bytes)}) | lid=${isOpen ? 'OPEN' : 'CLOSED'}, state=${stateLabel}`, 'rx');
 
   } else if (uuid === BLE_UUIDS.CHAR_AUTH_TYPE) {
     const code = bytes[0];
@@ -1289,19 +1405,14 @@ function onDisconnected() {
   state.isScanning = false;
   state.isBrewing = false;
   state.activeWorkflow = null;
+  state.lastTelematicsTitle = null;
   clearInterval(state.brewInterval);
   clearInterval(state.soakInterval);
   dismissPostBrewModal();
   if (el.soakControlBox) el.soakControlBox.classList.add('hidden');
   if (el.brewModal) el.brewModal.classList.add('hidden');
   updateSystemRinseUI('Idle (5 Shots)', 'Ready to run automated 5-shot purge: Shots 1–3 Lungo (coffee outlet) → Shots 4–5 Hot Water (dedicated water spout).', false);
-  state.characteristics.forEach((ch, uuid) => {
-    const handler = notifyHandlers.get(uuid);
-    if (handler && typeof ch.removeEventListener === 'function') {
-      ch.removeEventListener('characteristicvaluechanged', handler);
-    }
-  });
-  state.characteristics.clear();
+  clearCharacteristicListeners();
   updateConnectionUI();
   log('Disconnected from machine.', 'warn');
 }
@@ -1824,6 +1935,26 @@ async function stopSystemRinseWorkflow() {
   updateSystemRinseUI('Stopped', 'System rinse cancelled by user.', false);
 }
 
+async function readOptionalCupTargetDebug(label) {
+  const ch = state.characteristics.get(BLE_UUIDS.CHAR_CUP_TARGET);
+  if (!ch || !(ch.properties && ch.properties.read)) return;
+  try {
+    const b = await readBleCharacteristic(BLE_UUIDS.CHAR_CUP_TARGET);
+    log(`[DEBUG-cup] ${label} 06aa3a14=${bytesToHex(b)}`, 'rx');
+  } catch (e) {
+    log(`[DEBUG-cup] ${label} 06aa3a14 read failed: ${e.message}`, 'warn');
+  }
+}
+
+function getWriteMode(uuid) {
+  const ch = state.characteristics.get(uuid);
+  return ch && ch.writeValueWithResponse ? 'withResponse' : 'writeValue';
+}
+
+function parseCupVolumeMl(bytes) {
+  return (bytes && bytes.length >= 2) ? (((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF)) : null;
+}
+
 async function readDialCupSize() {
   if (!state.isConnected) {
     showToast('Please connect to the machine first!');
@@ -1832,11 +1963,15 @@ async function readDialCupSize() {
   const targetIdx = parseInt(el.selectCupTarget.value, 10);
   state.lastCupTargetIdx = targetIdx;
   const targetPayload = new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]);
-  log(`Selecting CupTarget ${targetIdx} on 06aa3a14: ${bytesToHex(targetPayload)}`, 'tx');
   try {
+    const t0 = Date.now();
     await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_TARGET, targetPayload);
+    log(`Selecting CupTarget ${targetIdx} on 06aa3a14: ${bytesToHex(targetPayload)} (${Date.now() - t0}ms, ${getWriteMode(BLE_UUIDS.CHAR_CUP_TARGET)})`, 'tx');
+    await readOptionalCupTargetDebug('Read after 3a14');
     await sleep(200);
+    const t1 = Date.now();
     const volBytes = await readBleCharacteristic(BLE_UUIDS.CHAR_CUP_VOLUME);
+    log(`[DEBUG-cup] Read 06aa3a24 took ${Date.now() - t1}ms`, 'info');
     if (volBytes) handleRawCharacteristicBytes(BLE_UUIDS.CHAR_CUP_VOLUME, volBytes);
   } catch (err) {
     log(`Cup size read error: ${err.message}`, 'err');
@@ -1855,14 +1990,47 @@ async function writeDialCupSize() {
   const targetPayload = new Uint8Array([(targetIdx >> 8) & 0xFF, targetIdx & 0xFF]);
   const volPayload = new Uint8Array([(volMl >> 8) & 0xFF, volMl & 0xFF, 0xFF, 0xFF]);
 
-  log(`[06aa3a14] Select Dial ${targetIdx}: ${bytesToHex(targetPayload)}`, 'tx');
-  log(`[06aa3a24] Program Dial ${targetIdx} -> ${volMl} ml: ${bytesToHex(volPayload)}`, 'tx');
+  const probeReadback = async (tag, reselect = false) => {
+    try {
+      if (reselect) {
+        await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_TARGET, targetPayload);
+        await sleep(150);
+      }
+      await readOptionalCupTargetDebug(tag);
+      const b = await readBleCharacteristic(BLE_UUIDS.CHAR_CUP_VOLUME);
+      const v = parseCupVolumeMl(b);
+      log(`[DEBUG-cup] ${tag}: Dial ${targetIdx} -> ${v !== null ? `${v} ml` : 'empty'} (${bytesToHex(b)}) vs req=${volMl} ml (${v === volMl ? 'MATCH' : 'MISMATCH'})`, v === volMl ? 'rx' : 'warn');
+      return v;
+    } catch (probeErr) {
+      log(`[DEBUG-cup] ${tag} readback failed: ${probeErr.message}`, 'warn');
+      return null;
+    }
+  };
+
   try {
+    const t0 = Date.now();
     await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_TARGET, targetPayload);
+    log(`[06aa3a14] Select Dial ${targetIdx}: ${bytesToHex(targetPayload)} (${Date.now() - t0}ms, ${getWriteMode(BLE_UUIDS.CHAR_CUP_TARGET)})`, 'tx');
+    await readOptionalCupTargetDebug('after 3a14 TX');
     await sleep(200);
+
+    const t1 = Date.now();
     await writeBleCharacteristic(BLE_UUIDS.CHAR_CUP_VOLUME, volPayload);
-    applyMachineCupTargetVolume(targetIdx, volMl);
-    showToast(`Saved ${volMl} ml to rotary dial!`);
+    log(`[06aa3a24] Program Dial ${targetIdx} -> ${volMl} ml: ${bytesToHex(volPayload)} (${Date.now() - t1}ms, ${getWriteMode(BLE_UUIDS.CHAR_CUP_VOLUME)})`, 'tx');
+
+    await sleep(250);
+    const volImmediate = await probeReadback('Readback +250ms');
+    await sleep(1000);
+    const volSettled = await probeReadback('Re-select+Readback +1.4s', true);
+    const verifiedVol = volSettled !== null ? volSettled : volImmediate;
+    const finalVol = (verifiedVol !== null && verifiedVol >= 10 && verifiedVol <= 500) ? verifiedVol : volMl;
+
+    applyMachineCupTargetVolume(targetIdx, finalVol);
+    if (verifiedVol !== null && verifiedVol !== volMl) {
+      showToast(`Dial ${targetIdx} mismatch: sent ${volMl} ml, machine read ${verifiedVol} ml!`);
+    } else {
+      showToast(`Saved ${finalVol} ml to rotary dial!`);
+    }
   } catch (err) {
     log(`Cup size write error: ${err.message}`, 'err');
     showToast(`Error: ${err.message}`);
@@ -2891,7 +3059,10 @@ function applyDialProfile(profileMap, activeBtn, toastText, persist = true) {
     syncDialProfileChipUI();
   }
   updateCupRangeHint();
-  if (toastText) showToast(toastText);
+  if (toastText) {
+    log(`[DEBUG-cup] Quick profile UI-only (${toastText}); press "Save to Dial" to write BLE.`, 'info');
+    showToast(toastText);
+  }
 }
 
 function applyFactoryDefaultsProfile() {
@@ -3036,6 +3207,10 @@ function updateLedTelematicsBanner(statusObj) {
   el.ledBannerTitle.textContent = info.title;
   el.ledBannerDesc.textContent = info.desc;
   el.btnJumpToDescale.classList.toggle('hidden', !info.showDescale);
+  if (state.lastTelematicsTitle !== info.title) {
+    state.lastTelematicsTitle = info.title;
+    log(`[Telematics] ${info.title} (${info.level}): ${info.desc}`, info.level === 'err' ? 'err' : (info.level === 'warn' ? 'warn' : 'info'));
+  }
 }
 
 const DESCALE_STEPS_DATA = {
@@ -3997,7 +4172,7 @@ function initListeners() {
   el.btnClearLogs.addEventListener('click', () => {
     el.logConsole.innerHTML = '';
     logCount = 0;
-    el.logCounter.textContent = '0 events';
+    el.btnClearLogs.textContent = 'Clear 0 Events';
   });
 
   [el.settingsModal, el.logsDrawer, el.manualModal].filter(Boolean).forEach(m => {
