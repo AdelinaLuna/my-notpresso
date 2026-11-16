@@ -1107,17 +1107,17 @@ test('Feature [#18]: Two-phase brew per-stage 3x temperatures and stage order sw
   assert.equal(txs[0], '01100800000200FA000000');
   assert.equal(txs[1], '03050704000000000207');
 
-  // Machine dial target volumes (4 & 5) sync directly into Americano preset defaults & subtitle
+  // Machine dial target volumes (3 & 4) sync directly into Americano preset defaults & subtitle
   const ameCard = h.rootGroups.get('.drink-card[data-drink]').find(c => c.dataset.drink === 'americano');
-  h.ctx.applyMachineCupTargetVolume(4, 35);
-  h.ctx.applyMachineCupTargetVolume(5, 150);
+  h.ctx.applyMachineCupTargetVolume(3, 35);
+  h.ctx.applyMachineCupTargetVolume(4, 150);
   assert.equal(defaults.americano.coffeeMl, 35);
   assert.equal(defaults.americano.waterMl, 150);
   assert.equal(state.presetTweaks.americano.coffeeMl, 35);
   assert.equal(state.presetTweaks.americano.waterMl, 150);
   assert.match(ameCard.querySelector('.drink-vol').textContent, /35ml \+ 150ml/);
-  h.ctx.applyMachineCupTargetVolume(4, 25);
-  h.ctx.applyMachineCupTargetVolume(5, 125);
+  h.ctx.applyMachineCupTargetVolume(3, 25);
+  h.ctx.applyMachineCupTargetVolume(4, 125);
 
   // Two-phase preset panels (Americano & Great Americano XL) have consistent Brew Temperature UI, swap button, and no drag handle
   const gxlCard = h.rootGroups.get('.drink-card[data-drink]').find(c => c.dataset.drink === 'great-americano');
@@ -1206,7 +1206,7 @@ test('Feature [v0.13.5]: Sync all 6 dial targets, persist to localStorage, and d
   const uuids = h.eval('BLE_UUIDS');
   const defaults = h.eval('PRESET_DRINK_DEFAULTS');
 
-  const dialValues = { 0: 20, 1: 35, 2: 80, 3: 230, 4: 30, 5: 140 };
+  const dialValues = { 0: 20, 1: 35, 2: 80, 3: 30, 4: 140, 5: 230 };
   const writtenTargets = [];
   state.characteristics.set(uuids.CHAR_CUP_TARGET, {});
   state.characteristics.set(uuids.CHAR_CUP_VOLUME, {});
@@ -1250,9 +1250,11 @@ test('Feature [v0.13.5]: Sync all 6 dial targets, persist to localStorage, and d
   assert.equal(lungoCard.querySelector('.drink-vol').textContent, 'Rotary Dial Preset (80 ml)');
   assert.equal(ameCard.querySelector('.drink-vol').textContent, 'Rotary Dial Preset (30ml + 140ml)');
 
-  const saved = JSON.parse(h.storage.get('notpresso_machine_dial_v1'));
+  const saved = JSON.parse(h.storage.get('notpresso_machine_dial_v2'));
   assert.equal(saved[2], 80);
-  assert.equal(saved[3], 230);
+  assert.equal(saved[3], 30);
+  assert.equal(saved[4], 140);
+  assert.equal(saved[5], 230);
 
   h.ctx.applyMachineCupTargetVolume(2, 70);
   assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 70), '(Lungo) 70 ml');
@@ -1261,7 +1263,7 @@ test('Feature [v0.13.5]: Sync all 6 dial targets, persist to localStorage, and d
   // Offline boot restores stored personalized machine volumes before UI init
   const h2 = createAppHarness({
     initialStorage: {
-      notpresso_machine_dial_v1: JSON.stringify({ 0: 20, 1: 35, 2: 70, 3: 230, 4: 30, 5: 140 })
+      notpresso_machine_dial_v2: JSON.stringify({ 0: 20, 1: 35, 2: 70, 3: 30, 4: 140, 5: 230 })
     }
   });
   const d2 = h2.eval('PRESET_DRINK_DEFAULTS');
@@ -1301,8 +1303,8 @@ test('Feature [v0.13.6]: Offline boot and quick calibration profile toggle sync 
   assert.equal(h.ctx.formatPresetVolumeLabel('coffee', 110), '(Lungo) 110 ml');
   assert.equal(h.ctx.formatPresetVolumeLabel('water', 200), '(Hot Water) 200 ml');
 
-  const persisted = h.storage.get('notpresso_machine_dial_v1');
-  const hReload = createAppHarness({ initialStorage: { notpresso_machine_dial_v1: persisted } });
+  const persisted = h.storage.get('notpresso_machine_dial_v2');
+  const hReload = createAppHarness({ initialStorage: { notpresso_machine_dial_v2: persisted } });
   const elReload = hReload.getEl();
   assert.equal(elReload.selectCupTarget.options[2].dataset.def, '110');
   assert.match(elReload.selectCupTarget.options[2].textContent, /Default 110ml/);

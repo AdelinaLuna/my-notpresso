@@ -6,7 +6,7 @@
  * See documentation/01-ble-gatt-protocol-reference.md for full byte tables.
  */
 
-const APP_VERSION = '0.13.9';
+const APP_VERSION = '0.13.10';
 const LOGO_HOLD_REFRESH_SEC = 3;
 
 // 1. BLE GATT Service & Characteristic UUIDs (Base template 06aaXXXX-f22a-11e3-9daa-0002a5d5c51b)
@@ -170,7 +170,7 @@ const state = {
   capsuleStockThreshold: null,
   selectedErrorSlot: 0,
   lastErrorRecord: null,
-  machineDialVolumes: { 0: 25, 1: 40, 2: 110, 3: 200, 4: 25, 5: 125 },
+  machineDialVolumes: { 0: 25, 1: 40, 2: 110, 3: 25, 4: 125, 5: 200 },
   lastCupTargetIdx: null,
   serialNumber: '--',
   firmwareVersion: '--',
@@ -879,8 +879,8 @@ function parseFaultRecordBytes(bytes, slotIdx = 0) {
   return { slot: slotIdx, errNum, errCat, category, errSub, isEmpty, summary };
 }
 
-const MACHINE_DIAL_STORAGE_KEY = 'notpresso_machine_dial_v1';
-const DIAL_COFFEE_DRINK_MAP = { 0: 'ristretto', 1: 'espresso', 2: 'lungo', 4: 'americano' };
+const MACHINE_DIAL_STORAGE_KEY = 'notpresso_machine_dial_v2';
+const DIAL_COFFEE_DRINK_MAP = { 0: 'ristretto', 1: 'espresso', 2: 'lungo', 3: 'americano' };
 const DIAL_COFFEE_CHIP_LABELS = { 0: 'Ristretto', 1: 'Espresso', 2: 'Lungo' };
 
 function syncCupTargetOptionUI(targetIdx, volMl) {
@@ -941,7 +941,7 @@ function applyMachineCupTargetVolume(targetIdx, volMl, persist = true) {
       state.presetTweaks[coffeeDrink].coffeeMl = volMl;
     }
     updatedDrink = coffeeDrink;
-  } else if (targetIdx === 5 && volMl >= 25 && volMl <= 300) {
+  } else if (targetIdx === 4 && volMl >= 25 && volMl <= 300) {
     PRESET_DRINK_DEFAULTS.americano.waterMl = volMl;
     if (state.presetTweaks && state.presetTweaks.americano) {
       state.presetTweaks.americano.waterMl = volMl;
@@ -2718,8 +2718,8 @@ function restoreCuratedFavorites() {
 }
 
 // Machine Dial Quick Profiles
-const DIAL_PROFILE_FACTORY = { 0: 25, 1: 40, 2: 110, 3: 200, 4: 25, 5: 125 };
-const DIAL_PROFILE_APP = { 0: 25, 1: 40, 2: 80, 3: 230, 4: 40, 5: 140 };
+const DIAL_PROFILE_FACTORY = { 0: 25, 1: 40, 2: 110, 3: 25, 4: 125, 5: 200 };
+const DIAL_PROFILE_APP = { 0: 25, 1: 40, 2: 80, 3: 40, 4: 140, 5: 230 };
 
 function dialMatchesProfile(dialMap, profileMap) {
   if (!dialMap || !profileMap) return false;
@@ -2763,7 +2763,7 @@ function applyFactoryDefaultsProfile() {
   applyDialProfile(
     DIAL_PROFILE_FACTORY,
     el.btnProfileFactoryDefaults,
-    'Profile: Factory Defaults (25 / 40 / 110 / 200 / 25 / 125)'
+    'Profile: Factory Defaults (25 / 40 / 110 / 25 / 125 / 200)'
   );
 }
 
@@ -2771,7 +2771,7 @@ function applyAppCalibrationProfile() {
   applyDialProfile(
     DIAL_PROFILE_APP,
     el.btnProfileAppCalibration,
-    'Profile: App Calibration (25 / 40 / 80 / 230 / 40 / 140)'
+    'Profile: App Calibration (25 / 40 / 80 / 40 / 140 / 230)'
   );
 }
 
@@ -3230,7 +3230,7 @@ function executePresetDrink(drinkKey, useTweaks = false) {
   if (cfg.temp === 0 || cfg.temp === 1 || cfg.temp === 2) {
     state.selectedTemp = cfg.temp;
   }
-  const dialVol = drinkKey === 'hotwater' ? ((state.machineDialVolumes && state.machineDialVolumes[3]) || 200) : def.coffeeMl;
+  const dialVol = drinkKey === 'hotwater' ? ((state.machineDialVolumes && state.machineDialVolumes[5]) || 200) : def.coffeeMl;
   const volChanged = drinkKey === 'hotwater'
     ? (cfg.waterMl !== dialVol)
     : (useTweaks && (cfg.coffeeMl !== def.coffeeMl || cfg.waterMl !== def.waterMl));
@@ -3269,14 +3269,14 @@ function getPresetVolumeTag(kind, ml) {
     if (ml === dial[0]) return 'Ristretto';
     if (ml === dial[1]) return 'Espresso';
     if (ml === dial[2]) return 'Lungo';
-    if (ml === dial[4]) return 'Americano';
+    if (ml === dial[3]) return 'Americano';
     return '';
   }
   if (kind === 'water') {
     if (ml === 25) return 'Min';
     if (ml === 300) return 'Max';
-    if (ml === dial[3]) return 'Hot Water';
-    if (ml === dial[5]) return 'Americano';
+    if (ml === dial[5]) return 'Hot Water';
+    if (ml === dial[4]) return 'Americano';
     if (ml === 160) return 'XL';
     return '';
   }

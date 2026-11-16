@@ -38,9 +38,9 @@ The physical rotary dial on the front of the Nespresso Expert stores its default
 | **Ristretto** | `0x0000` | `25 ml` | `15 ml` | `30 ml` |
 | **Espresso** | `0x0001` | `40 ml` | `30 ml` | `70 ml` |
 | **Lungo** | `0x0002` | `110 ml` | `70 ml` | `130 ml` |
-| **Hot Water** | `0x0003` | `200 ml` | `50 ml` | `300 ml` |
-| **Americano — Coffee step** | `0x0004` | `25 ml` | `15 ml` | `110 ml` |
-| **Americano — Water step** | `0x0005` | `125 ml` | `25 ml` | `300 ml` |
+| **Americano — Coffee step** | `0x0003` | `25 ml` | `15 ml` | `110 ml` |
+| **Americano — Water step** | `0x0004` | `125 ml` | `25 ml` | `300 ml` |
+| **Hot Water** | `0x0005` | `200 ml` | `50 ml` | `300 ml` |
 | *(Americano XL Reference)* | *(Custom / Preset)* | **`40 ml` Coffee + `160 ml` Water** | `15–130 ml` Coffee | `25–300 ml` Water |
 
 ---
